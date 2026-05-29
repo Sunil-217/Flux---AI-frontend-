@@ -16,6 +16,7 @@ interface Props {
   onSendMessage: (content: string) => void;
   onUploadFile: (file: File) => void;
   onNewChat: () => void;
+  onToggleSidebar: () => void;
 }
 
 export function ChatArea({
@@ -26,6 +27,7 @@ export function ChatArea({
   onSendMessage,
   onUploadFile,
   onNewChat,
+  onToggleSidebar,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -44,8 +46,19 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between gap-4 px-6 py-3 border-b border-zinc-800 flex-shrink-0">
-        <div className="min-w-0 flex items-center gap-2">
+      <header className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 flex-shrink-0">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onToggleSidebar}
+          className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+          aria-label="Toggle sidebar"
+        >
+          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div className="min-w-0 flex-1 flex items-center gap-2">
           {session ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />

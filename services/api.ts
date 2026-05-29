@@ -32,3 +32,9 @@ export async function askQuestion(
   });
   return response.data;
 }
+
+// Deletes session data from the backend (vectors + uploaded file).
+// Called alongside the local UI delete. Fails silently if not supported.
+export async function deleteChat(chatId: string): Promise<void> {
+  await client.delete(`/delete/${chatId}`);
+}
