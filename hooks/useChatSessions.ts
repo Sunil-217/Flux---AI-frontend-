@@ -99,6 +99,53 @@ export function useChatSessions() {
     [sessions]
   );
 
+  // Delete a single message (+ its paired AI reply if present)
+  const deleteMessage = useCallback(
+    (sessionId: string, messageId: string) => {
+      setSessions((prev) => {
+        const updated = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const idx = s.messages.findIndex((m) => m.id === messageId);
+          if (idx === -1) return s;
+          // Remove the message and the immediately following AI response
+          const toRemove = new Set([messageId]);
+          if (s.messages[idx + 1]?.role === 'assistant') {
+            toRemove.add(s.messages[idx + 1].id);
+          }
+          const messages = s.messages.filter((m) => !toRemove.has(m.id));
+          return { ...s, messages, updatedAt: Date.now() };
+        });
+        persist(updated);
+        return updated;
+      });
+    },
+    []
+  );
+
+  // Update a user message and trim all messages that came after it
+  const updateMessage = useCallback(
+    (sessionId: string, messageId: string, newContent: string) => {
+      setSessions((prev) => {
+        const updated = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const idx = s.messages.findIndex((m) => m.id === messageId);
+          if (idx === -1) return s;
+          const messages = s.messages
+            .slice(0, idx + 1)
+            .map((m) =>
+              m.id === messageId
+                ? { ...m, content: newContent, timestamp: Date.now() }
+                : m
+            );
+          return { ...s, messages, updatedAt: Date.now() };
+        });
+        persist(updated);
+        return updated;
+      });
+    },
+    []
+  );
+
   return {
     sessions,
     activeSession,
@@ -108,5 +155,7 @@ export function useChatSessions() {
     updateSession,
     addMessage,
     deleteSession,
+    deleteMessage,
+    updateMessage,
   };
 }

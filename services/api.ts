@@ -22,13 +22,20 @@ export interface ChatResponse {
   sources: Source[];
 }
 
+export interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export async function askQuestion(
   chatId: string,
-  question: string
+  question: string,
+  history: HistoryMessage[] = []
 ): Promise<ChatResponse> {
   const response = await client.post<ChatResponse>('/chat', {
     chat_id: chatId,
     question,
+    history,
   });
   return response.data;
 }

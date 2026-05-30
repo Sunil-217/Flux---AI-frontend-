@@ -1,7 +1,86 @@
 @import "tailwindcss";
 
-:root {
+/* ─────────────────────────────────────────────────────────────────────────
+   Close AI — premium design system with light & dark themes
+   All surface/text/line colors are CSS variables so the whole app re-themes
+   by toggling a single class on <html>. Accent (violet→indigo) works in both.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── Dark theme (default) ── */
+:root,
+.dark {
   color-scheme: dark;
+
+  --base: #08080b;
+  --panel: rgba(12, 12, 17, 0.7);
+  --elevated: rgba(13, 13, 18, 0.92);
+
+  --fill: rgba(255, 255, 255, 0.05);
+  --fill-hover: rgba(255, 255, 255, 0.09);
+  --fill-strong: rgba(255, 255, 255, 0.08);
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+
+  --bubble: rgba(255, 255, 255, 0.07);
+  --code: rgba(0, 0, 0, 0.45);
+
+  --ink: #f4f4f5;
+  --ink-2: #d4d4d8;
+  --ink-3: #9b9ba3;
+  --ink-4: #6f6f78;
+
+  --accent-fg: #a78bfa;
+
+  --grad-from: #c4b5fd;
+  --grad-mid: #818cf8;
+  --grad-to: #60a5fa;
+
+  --glow:
+    radial-gradient(58rem 40rem at 10% -12%, rgba(124, 108, 255, 0.13), transparent 60%),
+    radial-gradient(52rem 42rem at 110% 0%, rgba(91, 141, 239, 0.09), transparent 55%);
+
+  --ring-offset: #08080b;
+  --scroll-thumb: rgba(255, 255, 255, 0.1);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Light theme ── */
+.light {
+  color-scheme: light;
+
+  --base: #ffffff;
+  --panel: rgba(248, 248, 251, 0.78);
+  --elevated: rgba(255, 255, 255, 0.96);
+
+  --fill: rgba(9, 9, 18, 0.045);
+  --fill-hover: rgba(9, 9, 18, 0.075);
+  --fill-strong: rgba(9, 9, 18, 0.06);
+
+  --line: rgba(9, 9, 18, 0.1);
+  --line-strong: rgba(9, 9, 18, 0.16);
+
+  --bubble: #eef1f7;
+  --code: rgba(9, 9, 18, 0.05);
+
+  --ink: #18181b;
+  --ink-2: #3f3f46;
+  --ink-3: #5f5f68;
+  --ink-4: #9395a0;
+
+  --accent-fg: #7c3aed;
+
+  --grad-from: #7c3aed;
+  --grad-mid: #6366f1;
+  --grad-to: #2563eb;
+
+  --glow:
+    radial-gradient(58rem 40rem at 10% -12%, rgba(124, 108, 255, 0.1), transparent 60%),
+    radial-gradient(52rem 42rem at 110% 0%, rgba(91, 141, 239, 0.08), transparent 55%);
+
+  --ring-offset: #ffffff;
+  --scroll-thumb: rgba(9, 9, 18, 0.16);
+  --scroll-thumb-hover: rgba(9, 9, 18, 0.28);
 }
 
 *,
@@ -18,35 +97,90 @@ body {
 }
 
 body {
-  background-color: #09090b;
-  color: #e4e4e7;
+  color: var(--ink-2);
+  background-color: var(--base);
+  background-image: var(--glow);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     sans-serif;
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Custom scrollbar */
+/* ── Scrollbars ── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 3px;
+  background: var(--scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--scroll-thumb-hover);
+  background-clip: padding-box;
 }
 
-/* Selection */
 ::selection {
-  background: rgba(59, 130, 246, 0.3);
-  color: #e4e4e7;
+  background: rgba(124, 108, 255, 0.32);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring-offset), 0 0 0 4px rgba(124, 108, 255, 0.55);
+}
+textarea:focus-visible,
+input:focus-visible {
+  box-shadow: none;
+}
+
+/* ── Helpers ── */
+.text-gradient {
+  background: linear-gradient(120deg, var(--grad-from) 0%, var(--grad-mid) 45%, var(--grad-to) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.divider-glow {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--line-strong) 20%,
+    var(--line-strong) 80%,
+    transparent
+  );
+}
+
+/* ── Motion ── */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-msg-in {
+  animation: msg-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.06); }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-msg-in,
+  .animate-glow-pulse {
+    animation: none;
+  }
 }

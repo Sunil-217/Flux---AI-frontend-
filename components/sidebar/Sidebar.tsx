@@ -1,5 +1,6 @@
 import { NewChatButton } from './NewChatButton';
 import { ChatListItem } from './ChatListItem';
+import { Logo } from '@/components/layout/Logo';
 import type { ChatSession } from '@/types';
 
 interface Props {
@@ -24,63 +25,49 @@ export function Sidebar({
   return (
     <aside
       className={[
-        // Layout & colour
-        'flex flex-col bg-zinc-900 border-r border-zinc-800',
-        // Mobile: fixed full-height overlay; Desktop: sits in the flex row
+        'flex flex-col bg-[var(--panel)] backdrop-blur-xl border-r border-[var(--line)]',
         'fixed inset-y-0 left-0 z-50',
         'md:relative md:inset-auto md:z-auto',
-        // Width
-        'w-72 md:w-64 flex-shrink-0 h-full',
-        // Slide in/out on mobile; always visible on desktop
-        'transition-transform duration-200 ease-in-out',
+        'w-72 md:w-[270px] flex-shrink-0 h-full',
+        'transition-transform duration-300 ease-out',
         isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       ].join(' ')}
     >
-      {/* Brand + mobile close button */}
-      <div className="flex items-center gap-2.5 px-4 py-[14px] border-b border-zinc-800">
-        <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center flex-shrink-0">
-          <svg
-            className="w-3.5 h-3.5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M13 10V3L4 14h7v7l9-11h-7z"
-            />
-          </svg>
+      {/* Brand */}
+      <div className="flex items-center gap-3 px-4 h-16 flex-shrink-0">
+        <Logo size={34} />
+        <div className="flex-1 min-w-0">
+          <h1 className="text-[15px] font-semibold text-[var(--ink)] tracking-tight leading-none">Close AI</h1>
+          <p className="text-[11px] text-[var(--ink-3)] mt-1 leading-none">Document Intelligence</p>
         </div>
-        <span className="text-sm font-semibold text-zinc-100 tracking-tight flex-1">
-          Flux AI
-        </span>
-        {/* Only shown on mobile */}
         <button
           onClick={onClose}
-          className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
           aria-label="Close sidebar"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      {/* New Chat */}
-      <div className="p-3 border-b border-zinc-800/50">
+      {/* New chat */}
+      <div className="px-3 pb-1">
         <NewChatButton onClick={onNewChat} />
       </div>
 
-      {/* Session list */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-        {sessions.length === 0 ? (
-          <p className="text-xs text-zinc-600 text-center mt-8 px-4 leading-relaxed">
-            No chats yet.
-            <br />
-            Click &ldquo;New Chat&rdquo; to start.
+      {/* Sessions */}
+      <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-4 space-y-1">
+        {sessions.length > 0 && (
+          <p className="px-2 pb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--ink-4)]">
+            Recent
           </p>
+        )}
+        {sessions.length === 0 ? (
+          <div className="mt-12 px-4 text-center">
+            <p className="text-sm text-[var(--ink-3)]">No conversations yet</p>
+            <p className="text-xs text-[var(--ink-4)] mt-1">Start one above to begin</p>
+          </div>
         ) : (
           sessions.map((session) => (
             <ChatListItem
@@ -93,13 +80,6 @@ export function Sidebar({
           ))
         )}
       </nav>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-zinc-800">
-        <p className="text-[11px] text-zinc-600 text-center">
-          RAG-powered document Q&A
-        </p>
-      </div>
     </aside>
   );
 }

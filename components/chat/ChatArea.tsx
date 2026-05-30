@@ -6,6 +6,7 @@ import { ChatInput } from './ChatInput';
 import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
 import { FileUpload } from '@/components/upload/FileUpload';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import type { ChatSession } from '@/types';
 
 interface Props {
@@ -17,6 +18,8 @@ interface Props {
   onUploadFile: (file: File) => void;
   onNewChat: () => void;
   onToggleSidebar: () => void;
+  onEditMessage: (messageId: string, newContent: string) => void;
+  onDeleteMessage: (messageId: string) => void;
 }
 
 export function ChatArea({
@@ -28,6 +31,8 @@ export function ChatArea({
   onUploadFile,
   onNewChat,
   onToggleSidebar,
+  onEditMessage,
+  onDeleteMessage,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -39,45 +44,45 @@ export function ChatArea({
 
   const inputPlaceholder = !session
     ? 'Create a new chat to get started…'
-    : !uploadedFile
-    ? 'Upload a PDF first, then ask questions…'
-    : `Ask anything about ${uploadedFile}…`;
+    : uploadedFile
+    ? `Ask anything about ${uploadedFile}…`
+    : 'Message Close AI…';
 
   return (
     <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 flex-shrink-0">
-        {/* Hamburger — mobile only */}
+      <header className="relative flex items-center gap-3 px-4 h-16 flex-shrink-0 bg-[var(--panel)] backdrop-blur-md">
         <button
           onClick={onToggleSidebar}
-          className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+          className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
           aria-label="Toggle sidebar"
         >
-          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
 
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          {session ? (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-              <h1 className="text-sm font-medium text-zinc-300 truncate">
-                {session.title}
-              </h1>
-            </>
-          ) : (
-            <h1 className="text-sm font-medium text-zinc-500">
-              Select or create a chat
-            </h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-semibold text-[var(--ink)] truncate tracking-tight">
+            {session ? session.title : 'Close AI'}
+          </h1>
+          {session && (
+            <p className="text-[11px] text-[var(--ink-3)] truncate leading-none mt-0.5">
+              {uploadedFile ? `Document · ${uploadedFile}` : 'General assistant · web-connected'}
+            </p>
           )}
         </div>
+
+        <ThemeToggle />
+
         <FileUpload
           onUpload={onUploadFile}
           isUploading={isUploading}
           uploadedFile={uploadedFile}
           disabled={!session}
         />
+
+        <div className="divider-glow absolute bottom-0 inset-x-0 h-px" />
       </header>
 
       {/* Messages */}
@@ -89,26 +94,31 @@ export function ChatArea({
             onNewChat={onNewChat}
           />
         ) : (
-          <div className="max-w-3xl mx-auto w-full px-6 py-6 space-y-6">
+          <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-8 space-y-7">
             {session!.messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                onEdit={onEditMessage}
+                onDelete={onDeleteMessage}
+              />
             ))}
             {isLoading && <TypingIndicator />}
-            <div ref={endRef} />
+            <div ref={endRef} className="h-px" />
           </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 border-t border-zinc-800 px-4 py-4">
+      <div className="flex-shrink-0 px-4 pb-4 pt-2">
         <div className="max-w-3xl mx-auto w-full">
           <ChatInput
             onSend={onSendMessage}
             disabled={isLoading || !session}
             placeholder={inputPlaceholder}
           />
-          <p className="text-center text-[11px] text-zinc-700 mt-2">
-            Press Enter to send · Shift+Enter for new line
+          <p className="text-center text-[11px] text-[var(--ink-4)] mt-2.5">
+            Close AI can search the web and may make mistakes. Verify important info.
           </p>
         </div>
       </div>
