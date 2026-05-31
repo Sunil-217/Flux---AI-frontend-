@@ -36,11 +36,17 @@ export function ChatArea({
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
+  const messages = session?.messages ?? [];
+  const lastMessage = messages[messages.length - 1];
+  const hasMessages = messages.length > 0;
+  // Show the typing dots only until the assistant's first token streams in.
+  const awaitingReply =
+    isLoading && (messages.length === 0 || lastMessage?.role === 'user');
+
+  // Keep pinned to the latest content — including while tokens stream in.
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [session?.messages.length, isLoading]);
-
-  const hasMessages = (session?.messages.length ?? 0) > 0;
+  }, [messages.length, lastMessage?.content.length, isLoading]);
 
   const inputPlaceholder = !session
     ? 'Create a new chat to get started…'
@@ -51,7 +57,7 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
       {/* Header */}
-      <header className="relative flex items-center gap-3 px-4 h-16 flex-shrink-0 bg-[var(--panel)] backdrop-blur-md">
+      <header className="relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-16 flex-shrink-0 bg-[var(--panel)] backdrop-blur-md">
         <button
           onClick={onToggleSidebar}
           className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
@@ -103,7 +109,7 @@ export function ChatArea({
                 onDelete={onDeleteMessage}
               />
             ))}
-            {isLoading && <TypingIndicator />}
+            {awaitingReply && <TypingIndicator />}
             <div ref={endRef} className="h-px" />
           </div>
         )}

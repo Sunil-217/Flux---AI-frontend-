@@ -122,6 +122,30 @@ export function useChatSessions() {
     []
   );
 
+  // Merge fields into a single message in place (used for streaming tokens).
+  // persistNow defaults to false to avoid a localStorage write on every token.
+  const patchMessage = useCallback(
+    (
+      sessionId: string,
+      messageId: string,
+      patch: Partial<Message>,
+      persistNow = false
+    ) => {
+      setSessions((prev) => {
+        const updated = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const messages = s.messages.map((m) =>
+            m.id === messageId ? { ...m, ...patch } : m
+          );
+          return { ...s, messages };
+        });
+        if (persistNow) persist(updated);
+        return updated;
+      });
+    },
+    []
+  );
+
   // Update a user message and trim all messages that came after it
   const updateMessage = useCallback(
     (sessionId: string, messageId: string, newContent: string) => {
@@ -154,6 +178,7 @@ export function useChatSessions() {
     createSession,
     updateSession,
     addMessage,
+    patchMessage,
     deleteSession,
     deleteMessage,
     updateMessage,

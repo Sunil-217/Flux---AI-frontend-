@@ -20,13 +20,18 @@ export function AppLayout() {
     setActiveSessionId,
     createSession,
     addMessage,
+    patchMessage,
     updateSession,
     deleteSession,
     deleteMessage,
     updateMessage,
   } = useChatSessions();
 
-  const { isLoading, sendMessage, resendQuestion } = useChat(activeSessionId, addMessage);
+  const { isLoading, sendMessage, resendQuestion } = useChat(activeSessionId, {
+    addMessage,
+    patchMessage,
+    persist: (id) => updateSession(id, {}),
+  });
 
   const { isUploading, upload } = useFileUpload(
     activeSessionId,
