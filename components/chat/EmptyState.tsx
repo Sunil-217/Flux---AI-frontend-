@@ -1,4 +1,7 @@
+'use client';
+
 import { Logo } from '@/components/layout/Logo';
+import { useT } from '@/lib/i18n';
 
 interface Props {
   hasSession: boolean;
@@ -7,6 +10,7 @@ interface Props {
 }
 
 export function EmptyState({ hasSession, uploadedFile, onNewChat }: Props) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center h-full px-6 text-center select-none">
       <div className="mb-7">
@@ -15,7 +19,7 @@ export function EmptyState({ hasSession, uploadedFile, onNewChat }: Props) {
 
       {!hasSession ? (
         <>
-          <h2 className="text-3xl font-semibold mb-3 tracking-tight text-gradient">
+          <h2 className="text-3xl sm:text-4xl font-display font-medium mb-3 tracking-tight text-gradient">
             Welcome to Close AI
           </h2>
           <p className="text-sm text-[var(--ink-3)] mb-8 max-w-md leading-relaxed">
@@ -24,15 +28,15 @@ export function EmptyState({ hasSession, uploadedFile, onNewChat }: Props) {
           </p>
           <button
             onClick={onNewChat}
-            className="px-6 py-3 bg-gradient-to-r from-[#8b7bff] to-[#6366f1] hover:shadow-[0_0_30px_-4px_rgba(124,108,255,0.6)] text-sm font-semibold text-white rounded-xl transition-shadow active:scale-[0.98] shadow-lg shadow-indigo-500/25"
+            className="px-6 py-3 bg-gradient-to-r from-[var(--accent)] to-[var(--accent-strong)] hover:shadow-[0_0_30px_-4px_rgba(239,68,68,0.6)] text-sm font-semibold text-white rounded-xl transition-shadow active:scale-[0.98] shadow-lg shadow-red-500/25"
           >
             Start a new chat
           </button>
         </>
       ) : (
         <>
-          <h2 className="text-3xl font-semibold mb-3 tracking-tight text-gradient">
-            How can I help you today?
+          <h2 className="text-3xl sm:text-4xl font-display font-medium mb-3 tracking-tight text-gradient">
+            {t('How can I help you today?')}
           </h2>
           <p className="text-sm text-[var(--ink-3)] max-w-md leading-relaxed">
             {uploadedFile ? (

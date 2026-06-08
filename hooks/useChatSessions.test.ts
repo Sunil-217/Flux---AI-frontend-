@@ -1,26 +1,28 @@
 import { renderHook, act } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock the server API so the hook runs offline.
+vi.mock('@/services/api', () => ({
+  getChats: vi.fn().mockResolvedValue([]),
+  saveChats: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { useChatSessions } from '@/hooks/useChatSessions';
 import type { Message } from '@/types';
 
-const userMsg = (id: string, content: string): Message => ({
-  id,
-  role: 'user',
-  content,
-  timestamp: 1,
-});
-const aiMsg = (id: string, content: string): Message => ({
-  id,
-  role: 'assistant',
-  content,
-  timestamp: 2,
-});
+const userMsg = (id: string, content: string): Message => ({ id, role: 'user', content, timestamp: 1 });
+const aiMsg = (id: string, content: string): Message => ({ id, role: 'assistant', content, timestamp: 2 });
 
-beforeEach(() => localStorage.clear());
+// Mount the hook and flush the initial server load.
+async function mount() {
+  const hook = renderHook(() => useChatSessions());
+  await act(async () => {});
+  return hook;
+}
 
 describe('useChatSessions', () => {
-  it('creates a session and makes it active', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('creates a session and makes it active', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -29,8 +31,8 @@ describe('useChatSessions', () => {
     expect(result.current.activeSessionId).toBe(id);
   });
 
-  it('derives the title from the first user message', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('derives the title from the first user message', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -42,8 +44,8 @@ describe('useChatSessions', () => {
     expect(result.current.sessions[0].messages).toHaveLength(1);
   });
 
-  it('patchMessage updates content in place without trimming', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('patchMessage updates content in place without trimming', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -60,8 +62,8 @@ describe('useChatSessions', () => {
     expect(msgs[1].content).toBe('streamed answer');
   });
 
-  it('updateMessage edits a message and trims everything after it', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('updateMessage edits a message and trims everything after it', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -78,8 +80,8 @@ describe('useChatSessions', () => {
     expect(msgs[0].content).toBe('edited');
   });
 
-  it('deleteMessage removes the user message and its paired reply', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('deleteMessage removes the user message and its paired reply', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -94,8 +96,8 @@ describe('useChatSessions', () => {
     expect(result.current.sessions[0].messages).toHaveLength(0);
   });
 
-  it('deleteSession removes the session', () => {
-    const { result } = renderHook(() => useChatSessions());
+  it('deleteSession removes the session and clears the active id', async () => {
+    const { result } = await mount();
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -104,13 +106,6 @@ describe('useChatSessions', () => {
       result.current.deleteSession(id);
     });
     expect(result.current.sessions).toHaveLength(0);
-  });
-
-  it('persists sessions to localStorage', () => {
-    const { result } = renderHook(() => useChatSessions());
-    act(() => {
-      result.current.createSession();
-    });
-    expect(localStorage.getItem('flux_ai_sessions')).toBeTruthy();
+    expect(result.current.activeSessionId).toBeNull();
   });
 });

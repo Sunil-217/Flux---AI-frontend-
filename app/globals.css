@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Close AI — premium design system with light & dark themes
-   All surface/text/line colors are CSS variables so the whole app re-themes
-   by toggling a single class on <html>. Accent (violet→indigo) works in both.
+   Close AI — warm, premium design system (Claude-inspired) with light & dark.
+   Warm paper / warm charcoal neutrals, soft borders, subtle terracotta glow.
+   All surfaces are CSS variables; the user-picked accent overrides at runtime.
    ──────────────────────────────────────────────────────────────────────── */
 
 /* ── Dark theme (default) ── */
@@ -11,76 +11,83 @@
 .dark {
   color-scheme: dark;
 
-  --base: #08080b;
-  --panel: rgba(12, 12, 17, 0.7);
-  --elevated: rgba(13, 13, 18, 0.92);
+  /* Full black — sleek & premium */
+  --base: #000000;
+  --panel: rgba(10, 10, 12, 0.72);
+  --elevated: #161618;
 
   --fill: rgba(255, 255, 255, 0.05);
   --fill-hover: rgba(255, 255, 255, 0.09);
-  --fill-strong: rgba(255, 255, 255, 0.08);
+  --fill-strong: rgba(255, 255, 255, 0.07);
 
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.14);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
 
-  --bubble: rgba(255, 255, 255, 0.07);
-  --code: rgba(0, 0, 0, 0.45);
+  --bubble: rgba(255, 255, 255, 0.06);
+  --code: rgba(255, 255, 255, 0.04);
 
-  --ink: #f4f4f5;
-  --ink-2: #d4d4d8;
-  --ink-3: #9b9ba3;
-  --ink-4: #6f6f78;
+  --ink: #fafafa;
+  --ink-2: #d4d4d4;
+  --ink-3: #9a9a9a;
+  --ink-4: #6a6a6a;
 
-  --accent-fg: #a78bfa;
+  --accent-fg: #f87171;
+  --accent: #f87171;
+  --accent-strong: #dc2626;
 
-  --grad-from: #c4b5fd;
-  --grad-mid: #818cf8;
-  --grad-to: #60a5fa;
+  --grad-from: #fca5a5;
+  --grad-mid: #f87171;
+  --grad-to: #ef4444;
 
+  /* barely-there glow so pure black still has a hint of depth */
   --glow:
-    radial-gradient(58rem 40rem at 10% -12%, rgba(124, 108, 255, 0.13), transparent 60%),
-    radial-gradient(52rem 42rem at 110% 0%, rgba(91, 141, 239, 0.09), transparent 55%);
+    radial-gradient(60rem 44rem at 12% -14%, rgba(255, 255, 255, 0.025), transparent 60%),
+    radial-gradient(54rem 44rem at 108% 0%, rgba(217, 119, 87, 0.035), transparent 55%);
 
-  --ring-offset: #08080b;
-  --scroll-thumb: rgba(255, 255, 255, 0.1);
-  --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
+  --ring-offset: #000000;
+  --scroll-thumb: rgba(245, 240, 230, 0.13);
+  --scroll-thumb-hover: rgba(245, 240, 230, 0.24);
 }
 
 /* ── Light theme ── */
 .light {
   color-scheme: light;
 
-  --base: #ffffff;
-  --panel: rgba(248, 248, 251, 0.78);
-  --elevated: rgba(255, 255, 255, 0.96);
+  /* Warm paper — Claude's signature calm light theme */
+  --base: #faf9f5;
+  --panel: rgba(244, 242, 235, 0.82);
+  --elevated: #fffefb;
 
-  --fill: rgba(9, 9, 18, 0.045);
-  --fill-hover: rgba(9, 9, 18, 0.075);
-  --fill-strong: rgba(9, 9, 18, 0.06);
+  --fill: rgba(60, 54, 42, 0.05);
+  --fill-hover: rgba(60, 54, 42, 0.085);
+  --fill-strong: rgba(60, 54, 42, 0.065);
 
-  --line: rgba(9, 9, 18, 0.1);
-  --line-strong: rgba(9, 9, 18, 0.16);
+  --line: rgba(60, 50, 38, 0.12);
+  --line-strong: rgba(60, 50, 38, 0.20);
 
-  --bubble: #eef1f7;
-  --code: rgba(9, 9, 18, 0.05);
+  --bubble: #f0ece1;
+  --code: rgba(50, 42, 28, 0.05);
 
-  --ink: #18181b;
-  --ink-2: #3f3f46;
-  --ink-3: #5f5f68;
-  --ink-4: #9395a0;
+  --ink: #2b2925;
+  --ink-2: #4b483f;
+  --ink-3: #6d695f;
+  --ink-4: #9b968a;
 
-  --accent-fg: #7c3aed;
+  --accent-fg: #c2410c;
+  --accent: #ea580c;
+  --accent-strong: #b91c1c;
 
-  --grad-from: #7c3aed;
-  --grad-mid: #6366f1;
-  --grad-to: #2563eb;
+  --grad-from: #ea580c;
+  --grad-mid: #dc2626;
+  --grad-to: #b91c1c;
 
   --glow:
-    radial-gradient(58rem 40rem at 10% -12%, rgba(124, 108, 255, 0.1), transparent 60%),
-    radial-gradient(52rem 42rem at 110% 0%, rgba(91, 141, 239, 0.08), transparent 55%);
+    radial-gradient(60rem 44rem at 12% -14%, rgba(217, 119, 87, 0.07), transparent 60%),
+    radial-gradient(54rem 44rem at 108% 0%, rgba(217, 119, 87, 0.05), transparent 55%);
 
-  --ring-offset: #ffffff;
-  --scroll-thumb: rgba(9, 9, 18, 0.16);
-  --scroll-thumb-hover: rgba(9, 9, 18, 0.28);
+  --ring-offset: #faf9f5;
+  --scroll-thumb: rgba(50, 42, 28, 0.18);
+  --scroll-thumb-hover: rgba(50, 42, 28, 0.30);
 }
 
 *,
@@ -102,8 +109,8 @@ body {
   background-image: var(--glow);
   background-attachment: fixed;
   background-repeat: no-repeat;
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
-    sans-serif;
+  font-family: var(--app-font, var(--font-geist-sans)), ui-sans-serif, system-ui,
+    -apple-system, sans-serif;
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -130,13 +137,13 @@ body {
 }
 
 ::selection {
-  background: rgba(124, 108, 255, 0.32);
+  background: rgba(239, 68, 68, 0.32);
   color: #fff;
 }
 
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--ring-offset), 0 0 0 4px rgba(124, 108, 255, 0.55);
+  box-shadow: 0 0 0 2px var(--ring-offset), 0 0 0 4px rgba(239, 68, 68, 0.55);
 }
 textarea:focus-visible,
 input:focus-visible {
@@ -149,6 +156,12 @@ input:focus-visible {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Elegant serif for display headings (premium, Claude-like) */
+.font-display {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em;
 }
 
 .divider-glow {
@@ -178,9 +191,56 @@ input:focus-visible {
   animation: glow-pulse 5s ease-in-out infinite;
 }
 
+/* Shimmer sweep for media-generation placeholders. */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.animate-shimmer {
+  animation: shimmer 1.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-msg-in,
-  .animate-glow-pulse {
+  .animate-glow-pulse,
+  .animate-shimmer {
     animation: none;
+  }
+}
+
+/* Export → PDF: window.print() yields a clean, ink-friendly transcript. */
+@media print {
+  :root,
+  .dark,
+  .light {
+    --base: #ffffff;
+    --panel: #ffffff;
+    --elevated: #ffffff;
+    --fill: #f3f4f6;
+    --fill-strong: #eceef1;
+    --fill-hover: #e5e7eb;
+    --ink: #111827;
+    --ink-2: #1f2937;
+    --ink-3: #374151;
+    --ink-4: #6b7280;
+    --line: #e5e7eb;
+    --line-strong: #d1d5db;
+    --glow: none;
+  }
+  body {
+    background: #fff !important;
+    background-image: none !important;
+  }
+  aside,
+  header {
+    display: none !important;
+  }
+  /* Hide all interactive controls inside the conversation (copy, regenerate, chips…) */
+  main button {
+    display: none !important;
+  }
+  main .overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
   }
 }

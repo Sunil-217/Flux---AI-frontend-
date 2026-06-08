@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
 import { streamQuestion } from '@/services/api';
@@ -15,19 +15,29 @@ interface ChatDeps {
     patch: Partial<Message>,
     persistNow?: boolean
   ) => void;
+  beginVariant: (sessionId: string, messageId: string) => void;
+  patchVariant: (sessionId: string, messageId: string, text: string) => void;
   /** Flush the session to storage once streaming finishes. */
   persist: (sessionId: string) => void;
 }
 
 export function useChat(sessionId: string | null, deps: ChatDeps) {
-  const { addMessage, patchMessage, persist } = deps;
+  const { addMessage, patchMessage, beginVariant, patchVariant, persist } = deps;
   const [isLoading, setIsLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Stop the in-flight response (keeps whatever streamed in so far).
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   // Shared streaming routine: appends tokens to a single assistant message.
   const runStream = useCallback(
-    async (content: string, history: HistoryMessage[]) => {
+    async (content: string, history: HistoryMessage[], image?: string) => {
       if (!sessionId) return;
 
+      const controller = new AbortController();
+      abortRef.current = controller;
       let assistantId: string | null = null;
       let acc = '';
       let pendingSources: Source[] | undefined;
@@ -56,11 +66,15 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
       };
 
       try {
-        await streamQuestion(sessionId, content, history, handlers);
+        await streamQuestion(sessionId, content, history, handlers, image, controller.signal);
         if (!assistantId) toast.error('No response received. Please try again.');
-      } catch {
-        toast.error('Failed to get a response. Please try again.');
+      } catch (err) {
+        // A user-triggered stop (AbortError) is not an error — keep the partial reply.
+        if ((err as Error)?.name !== 'AbortError') {
+          toast.error('Failed to get a response. Please try again.');
+        }
       } finally {
+        abortRef.current = null;
         if (assistantId) persist(sessionId);
       }
     },
@@ -68,16 +82,19 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
   );
 
   const sendMessage = useCallback(
-    async (content: string, history: HistoryMessage[] = []) => {
-      if (!sessionId || !content.trim() || isLoading) return;
+    async (content: string, history: HistoryMessage[] = [], image?: string) => {
+      if (!sessionId || isLoading) return;
+      const text = content.trim();
+      if (!text && !image) return;
       addMessage(sessionId, {
         id: uuidv4(),
         role: 'user',
-        content: content.trim(),
+        content: text,
         timestamp: Date.now(),
+        image,
       });
       setIsLoading(true);
-      await runStream(content.trim(), history);
+      await runStream(text || 'Describe this image in detail.', history, image);
       setIsLoading(false);
     },
     [sessionId, isLoading, addMessage, runStream]
@@ -94,5 +111,37 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
     [sessionId, isLoading, runStream]
   );
 
-  return { isLoading, sendMessage, resendQuestion } as const;
+  // Regenerate as a NEW variant on an existing assistant message (keeps the old answer).
+  const regenerateVariant = useCallback(
+    async (assistantId: string, content: string, history: HistoryMessage[] = []) => {
+      if (!sessionId || isLoading) return;
+      setIsLoading(true);
+      beginVariant(sessionId, assistantId);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let acc = '';
+      const handlers: StreamHandlers = {
+        onToken: (t) => {
+          acc += t;
+          patchVariant(sessionId, assistantId, acc);
+        },
+        onSources: (s) => patchMessage(sessionId, assistantId, { sources: s }),
+        onError: () => toast.error('Failed to get a response. Please try again.'),
+      };
+      try {
+        await streamQuestion(sessionId, content, history, handlers, undefined, controller.signal);
+      } catch (err) {
+        if ((err as Error)?.name !== 'AbortError') {
+          toast.error('Failed to get a response. Please try again.');
+        }
+      } finally {
+        abortRef.current = null;
+        setIsLoading(false);
+        persist(sessionId);
+      }
+    },
+    [sessionId, isLoading, beginVariant, patchVariant, patchMessage, persist]
+  );
+
+  return { isLoading, sendMessage, resendQuestion, regenerateVariant, stop } as const;
 }

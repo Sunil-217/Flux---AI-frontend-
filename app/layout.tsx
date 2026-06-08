@@ -1,6 +1,16 @@
-import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import {
+  Geist,
+  Geist_Mono,
+  Fraunces,
+  Inter,
+  Space_Grotesk,
+  Playfair_Display,
+  JetBrains_Mono,
+} from 'next/font/google';
 import './globals.css';
+import 'highlight.js/styles/github-dark.css'; // syntax highlighting for code blocks
+import 'katex/dist/katex.min.css'; // LaTeX math rendering
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -12,10 +22,47 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+// Elegant serif for display headings (premium, Claude-like).
+const fraunces = Fraunces({
+  variable: '--font-serif',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+// Extra interface fonts — exposed via CSS variables so the user's Interface-font
+// setting can switch between them at runtime (no reload needed).
+const inter = Inter({
+  variable: '--font-inter',
+  subsets: ['latin'],
+  display: 'swap',
+});
+const spaceGrotesk = Space_Grotesk({
+  variable: '--font-space-grotesk',
+  subsets: ['latin'],
+  display: 'swap',
+});
+const playfair = Playfair_Display({
+  variable: '--font-playfair',
+  subsets: ['latin'],
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  variable: '--font-jetbrains',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'Close AI – Document Intelligence',
   description:
     'Chat with memory, live web search, and PDF document understanding.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, title: 'Close AI', statusBarStyle: 'black-translucent' },
+  icons: { icon: '/icon.svg', apple: '/icon.svg' },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#000000',
 };
 
 // Applies the saved theme before paint to avoid a flash of the wrong theme.
@@ -28,12 +75,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${spaceGrotesk.variable} ${playfair.variable} ${jetbrainsMono.variable} h-full`}
     >
-      <head>
+      <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
-      <body className="h-full">{children}</body>
+        {children}
+      </body>
     </html>
   );
 }

@@ -14,8 +14,10 @@ export function FileUpload({ onUpload, isUploading, uploadedFile, disabled }: Pr
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Accept PDFs, Word docs, and text/code files. The hook + backend validate the
+  // exact type, so here we just forward any dropped/picked file.
   const handleFile = (file: File | undefined) => {
-    if (!file || file.type !== 'application/pdf') return;
+    if (!file) return;
     onUpload(file);
   };
 
@@ -42,7 +44,7 @@ export function FileUpload({ onUpload, isUploading, uploadedFile, disabled }: Pr
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,application/pdf"
+        accept=".pdf,.docx,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.java,.c,.cpp,.h,.go,.rs,.rb,.php,.sh,.yaml,.yml,.xml,.sql"
         className="hidden"
         onChange={handleChange}
         disabled={isDisabled}
@@ -55,11 +57,11 @@ export function FileUpload({ onUpload, isUploading, uploadedFile, disabled }: Pr
         disabled={isDisabled}
         className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl border transition-all ${
           isDragging
-            ? 'border-violet-400/60 bg-violet-400/10 text-[var(--accent-fg)]'
+            ? 'border-red-400/60 bg-red-400/10 text-[var(--accent-fg)]'
             : isDisabled
             ? 'border-[var(--line)] text-[var(--ink-4)] cursor-not-allowed'
             : uploadedFile
-            ? 'border-violet-400/30 bg-violet-400/10 text-[var(--accent-fg)] hover:bg-violet-400/[0.16]'
+            ? 'border-red-400/30 bg-red-400/10 text-[var(--accent-fg)] hover:bg-red-400/[0.16]'
             : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]'
         }`}
       >
@@ -83,8 +85,8 @@ export function FileUpload({ onUpload, isUploading, uploadedFile, disabled }: Pr
             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
             </svg>
-            <span className="hidden sm:inline">Upload PDF</span>
-            <span className="sm:hidden">PDF</span>
+            <span className="hidden sm:inline">Upload file</span>
+            <span className="sm:hidden">File</span>
           </>
         )}
       </button>

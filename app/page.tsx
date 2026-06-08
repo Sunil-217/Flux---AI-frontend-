@@ -1,5 +1,10 @@
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AuthProvider } from '@/components/auth/AuthProvider';
+import { AppRoot } from '@/components/layout/AppRoot';
 
 export default function Home() {
-  return <AppLayout />;
+  return (
+    <AuthProvider>
+      <AppRoot />
+    </AuthProvider>
+  );
 }
