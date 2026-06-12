@@ -225,6 +225,123 @@ export async function answerCodeQuestion(
   return res.data.answer;
 }
 
+// ── Developer API keys (platform feature: call Close AI like OpenAI) ──
+export interface ApiKeyInfo {
+  id: number;
+  name: string;
+  prefix: string;
+  revoked: boolean;
+  usage_count: number;
+  total_tokens: number;
+  created_at?: string;
+  last_used_at?: string;
+}
+
+/** Create a key. The raw `key` is returned ONCE — show it and never again. */
+export async function createApiKey(name: string): Promise<{ key: string; info: ApiKeyInfo }> {
+  const res = await client.post<{ key: string; info: ApiKeyInfo }>('/api-keys', { name });
+  return res.data;
+}
+
+export async function listApiKeys(): Promise<ApiKeyInfo[]> {
+  const res = await client.get<{ keys: ApiKeyInfo[] }>('/api-keys');
+  return res.data.keys ?? [];
+}
+
+export async function revokeApiKey(id: number): Promise<void> {
+  await client.delete(`/api-keys/${id}`);
+}
+
+// ── Deep research, quiz, memory, media sources, neural TTS ──
+export interface ResearchSource {
+  title: string;
+  url: string;
+}
+
+/** Multi-step web research with a cited markdown report. Slow (30–90s). */
+export async function deepResearch(
+  question: string
+): Promise<{ report: string; sources: ResearchSource[] }> {
+  const res = await client.post<{ report: string; sources: ResearchSource[] }>(
+    '/research',
+    { question },
+    { timeout: 300_000 }
+  );
+  return res.data;
+}
+
+export interface QuizQuestion {
+  q: string;
+  options: string[];
+  answer: number; // index into options
+  explanation: string;
+}
+
+/** Generate a quiz from the chat's uploaded docs (chat_id) or raw content. */
+export async function generateQuiz(body: {
+  chat_id?: string;
+  content?: string;
+  count?: number;
+}): Promise<QuizQuestion[]> {
+  const res = await client.post<{ questions: QuizQuestion[] }>('/quiz', body, {
+    timeout: 120_000,
+  });
+  return res.data.questions ?? [];
+}
+
+/** Index a YouTube video's transcript into this chat (then ask questions about it). */
+export async function uploadYoutube(url: string, chatId: string): Promise<string> {
+  const res = await client.post<{ source: string }>(
+    '/upload-youtube',
+    { url, chat_id: chatId },
+    { timeout: 120_000 }
+  );
+  return res.data.source ?? url;
+}
+
+/** Index a public GitHub repo's code into this chat. */
+export async function uploadGithub(url: string, chatId: string): Promise<string> {
+  const res = await client.post<{ source: string }>(
+    '/upload-github',
+    { url, chat_id: chatId },
+    { timeout: 180_000 }
+  );
+  return res.data.source ?? url;
+}
+
+/** Neural TTS (edge-tts) — returns MP3 bytes for an answer. */
+export async function ttsSpeak(text: string, voice?: string): Promise<Blob> {
+  const res = await client.post(
+    '/tts',
+    { text: text.slice(0, 2000), ...(voice ? { voice } : {}) },
+    { responseType: 'blob', timeout: 60_000 }
+  );
+  return res.data as Blob;
+}
+
+/** Fire-and-forget: extract durable user facts from an exchange into memory. */
+export async function extractMemory(question: string, answer: string): Promise<void> {
+  try {
+    await client.post('/memory/extract', { question, answer });
+  } catch {
+    /* memory is best-effort */
+  }
+}
+
+export async function getMemoryFacts(): Promise<string[]> {
+  const res = await client.get<{ facts: string[] }>('/memory');
+  return res.data.facts ?? [];
+}
+
+export async function clearMemory(): Promise<void> {
+  await client.delete('/memory');
+}
+
+export async function deleteMemoryFact(index: number): Promise<string[]> {
+  const res = await client.delete<{ facts: string[] }>(`/memory/${index}`);
+  return res.data.facts ?? [];
+}
+
 // ── Chat with a URL (fetch + index a web page) ──
 export async function uploadUrl(url: string, chatId: string): Promise<string> {
   const res = await client.post<{ source: string }>('/upload-url', { url, chat_id: chatId });
@@ -232,13 +349,14 @@ export async function uploadUrl(url: string, chatId: string): Promise<string> {
 }
 
 // ── PDF upload ──
-export async function uploadFile(file: File, chatId: string): Promise<void> {
+export async function uploadFile(file: File, chatId: string): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('chat_id', chatId);
-  await client.post('/upload', formData, {
+  const res = await client.post<{ filename?: string }>('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return res.data.filename || file.name;
 }
 
 // ── Streaming chat ──
@@ -259,6 +377,8 @@ export const CUSTOM_INSTRUCTIONS_KEY = 'close_ai_custom_instructions';
 export const WEB_SEARCH_KEY = 'close_ai_web_search'; // 'off' disables live web grounding
 // Instructions for the folder the active chat belongs to (kept in sync by AppLayout).
 export const FOLDER_INSTRUCTIONS_KEY = 'close_ai_folder_instructions';
+// Active persona's system prompt (set in Settings → Personas).
+export const PERSONA_PROMPT_KEY = 'close_ai_persona_prompt';
 
 function responseStylePrefs(): {
   style?: string;
@@ -271,8 +391,10 @@ function responseStylePrefs(): {
     const style = localStorage.getItem(STYLE_KEY) || '';
     const ci = (localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY) || '').trim();
     const folder = (localStorage.getItem(FOLDER_INSTRUCTIONS_KEY) || '').trim();
-    // Folder (project) instructions first, then the user's global instructions.
-    const combined = [folder, ci].filter(Boolean).join('\n\n');
+    const persona = (localStorage.getItem(PERSONA_PROMPT_KEY) || '').trim();
+    // Persona first (it defines the assistant), then folder (project) context,
+    // then the user's global instructions.
+    const combined = [persona, folder, ci].filter(Boolean).join('\n\n');
     if (style && style !== 'default') out.style = style;
     if (combined) out.custom_instructions = combined;
     if (localStorage.getItem(WEB_SEARCH_KEY) === 'off') out.web_search = false;

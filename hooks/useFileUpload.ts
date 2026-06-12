@@ -25,9 +25,9 @@ export function useFileUpload(
       const toastId = toast.loading(`Uploading ${file.name}…`);
 
       try {
-        await uploadFileApi(file, sessionId);
+        const filename = await uploadFileApi(file, sessionId);
         toast.success('File uploaded — ask anything about it', { id: toastId });
-        onSuccess?.(file.name);
+        onSuccess?.(filename);
       } catch (err) {
         toast.error(apiError(err, 'Upload failed. Please try again.'), { id: toastId });
       } finally {
@@ -51,8 +51,8 @@ export function useFileUpload(
       let ok = 0;
       for (const file of valid) {
         try {
-          await uploadFileApi(file, sessionId);
-          onSuccess?.(file.name);
+          const filename = await uploadFileApi(file, sessionId);
+          onSuccess?.(filename);
           ok += 1;
           toast.loading(`Uploading… (${ok}/${valid.length})`, { id: toastId });
         } catch {

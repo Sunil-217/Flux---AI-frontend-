@@ -108,6 +108,8 @@ const SLASH_COMMANDS = [
   { cmd: 'excel', hint: 'Generate an Excel spreadsheet (.xlsx)' },
   { cmd: 'word',  hint: 'Generate a Word document (.docx)' },
   { cmd: 'ppt',   hint: 'Generate a PowerPoint presentation (.pptx)' },
+  { cmd: 'research', hint: 'Deep research with sources' },
+  { cmd: 'quiz',  hint: 'Quiz from your docs or last answer' },
   { cmd: 'summarize', hint: 'Summarize the conversation' },
   { cmd: 'explain', hint: 'Explain simply' },
   { cmd: 'translate', hint: 'Translate (e.g. /translate Tamil …)' },
@@ -117,7 +119,7 @@ const SLASH_COMMANDS = [
 
 // Slash commands that bypass LLM expansion — AppLayout routes them to dedicated
 // generation endpoints, so the raw `/excel foo` text must reach handleSendMessage.
-const PASSTHROUGH_SLASH = new Set(['image', 'video', 'pdf', 'excel', 'word', 'ppt']);
+const PASSTHROUGH_SLASH = new Set(['image', 'video', 'pdf', 'excel', 'word', 'ppt', 'research', 'quiz']);
 
 function expandSlash(text: string): string {
   const m = text.match(/^\/([a-zA-Z]+)\s*([\s\S]*)$/);

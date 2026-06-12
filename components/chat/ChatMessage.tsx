@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, memo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,7 +10,11 @@ import toast from 'react-hot-toast';
 import type { Components } from 'react-markdown';
 import { Logo } from '@/components/layout/Logo';
 import { OfficeViewer } from './OfficeViewer';
-import { translateText } from '@/services/api';
+import { ArtifactPreview } from './ArtifactPreview';
+import { PyRunner } from './PyRunner';
+import { MermaidBlock } from './MermaidBlock';
+import { QuizCard } from './QuizCard';
+import { translateText, ttsSpeak } from '@/services/api';
 import { VOICE_KEY } from '@/components/layout/AccentPicker';
 import type { Message, Source } from '@/types';
 
@@ -39,7 +43,14 @@ const CODE_EXT: Record<string, string> = {
 /* ─── Code block: language label + copy/download buttons + syntax highlighting ─ */
 function CodeBlock({ language, children }: { language: string; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
+  const [showPreview, setShowPreview] = useState(false); // html → ArtifactPreview modal
+  const [runSignal, setRunSignal] = useState(0); // python → PyRunner (0 = never run)
+  const [pyBusy, setPyBusy] = useState(false);
   const codeText = childrenToText(children).replace(/\n$/, '');
+  const langLower = (language || '').toLowerCase();
+  const isHtml =
+    langLower === 'html' || /^\s*(<!doctype\s+html|<html[\s>])/i.test(codeText);
+  const isPython = langLower === 'python' || langLower === 'py';
   const copy = () =>
     navigator.clipboard
       .writeText(codeText)
@@ -63,12 +74,38 @@ function CodeBlock({ language, children }: { language: string; children: ReactNo
     URL.revokeObjectURL(url);
   };
   return (
+    <>
     <div className="my-4 rounded-xl border border-[var(--line)] overflow-hidden">
       <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-[var(--line)] bg-[var(--fill)]">
         <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-3)]">
           {language || 'code'}
         </span>
         <div className="flex items-center gap-3">
+        {isHtml && (
+          <button
+            onClick={() => setShowPreview(true)}
+            title="Render this HTML in a sandboxed preview"
+            aria-label="Preview HTML"
+            className="inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-0.5 border border-[var(--line)] bg-[var(--fill)] hover:bg-[var(--fill-hover)] text-[var(--ink-2)] transition-colors"
+          >
+            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14Z" /></svg>
+            Preview
+          </button>
+        )}
+        {isPython && (
+          <button
+            onClick={() => setRunSignal((s) => s + 1)}
+            disabled={pyBusy}
+            title="Run this Python code in your browser (Pyodide)"
+            aria-label="Run Python code"
+            className="inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-0.5 border border-[var(--line)] bg-[var(--fill)] hover:bg-[var(--fill-hover)] text-[var(--ink-2)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {!pyBusy && (
+              <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14Z" /></svg>
+            )}
+            {pyBusy ? 'Running…' : 'Run'}
+          </button>
+        )}
         <button
           onClick={download}
           className="flex items-center gap-1 text-[11px] text-[var(--ink-3)] hover:text-[var(--ink)] transition-colors"
@@ -106,6 +143,15 @@ function CodeBlock({ language, children }: { language: string; children: ReactNo
         </code>
       </pre>
     </div>
+    {/* Python output panel — mounts on first Run click, Pyodide loads from CDN then */}
+    {runSignal > 0 && (
+      <div className="-mt-2 mb-4">
+        <PyRunner code={codeText} runSignal={runSignal} onRunningChange={setPyBusy} />
+      </div>
+    )}
+    {/* Live HTML artifact preview (sandboxed iframe modal) */}
+    {showPreview && <ArtifactPreview code={codeText} onClose={() => setShowPreview(false)} />}
+    </>
   );
 }
 
@@ -123,7 +169,18 @@ const mdComponents: Components = {
   code: ({ children, className }) => {
     const match = /language-(\w+)/.exec(className ?? '');
     const isBlock = Boolean(match) || childrenToText(children).includes('\n');
-    if (isBlock) return <CodeBlock language={match?.[1] ?? ''}>{children}</CodeBlock>;
+    if (isBlock) {
+      // ```mermaid → replace the code block with the rendered SVG diagram.
+      if ((match?.[1] ?? '').toLowerCase() === 'mermaid') {
+        return (
+          <MermaidBlock
+            code={childrenToText(children).replace(/\n$/, '')}
+            fallback={<CodeBlock language="mermaid">{children}</CodeBlock>}
+          />
+        );
+      }
+      return <CodeBlock language={match?.[1] ?? ''}>{children}</CodeBlock>;
+    }
     return <code className="px-1.5 py-0.5 bg-[var(--fill)] rounded-md text-[13px] text-[var(--accent-fg)] font-mono" style={{ fontFamily: 'var(--code-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }}>{children}</code>;
   },
   blockquote: ({ children }) => (
@@ -445,13 +502,18 @@ interface Props {
   streaming?: boolean;
 }
 
-export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerateMedia, streaming }: Props) {
+function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMedia, streaming }: Props) {
   const isUser = message.role === 'user';
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
   const [openSource, setOpenSource] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null); // neural-TTS playback element
+  const audioUrlRef = useRef<string | null>(null); // object URL backing audioRef (revoked after use)
+  const synthRef = useRef(false); // true while the browser speechSynthesis fallback is active
+  const ttsReqRef = useRef(0); // bumping this invalidates an in-flight ttsSpeak request
   const [translated, setTranslated] = useState<string | null>(null);
   const [tLang, setTLang] = useState('');
   const [translating, setTranslating] = useState(false);
@@ -486,16 +548,37 @@ export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerate
       .writeText(message.content)
       .then(() => toast.success('Copied'))
       .catch(() => toast.error('Could not copy — clipboard blocked.'));
-  const speak = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    if (speaking) {
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
-      return;
+  /* ── Read aloud: neural TTS (backend MP3), browser speechSynthesis fallback ── */
+  const stopSpeak = () => {
+    ttsReqRef.current++; // invalidate any in-flight ttsSpeak request
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
     }
-    const plain = message.content
-      .replace(/```[\s\S]*?```/g, ' code block ')
-      .replace(/[#*`_>~|]/g, '');
+    if (synthRef.current && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      synthRef.current = false;
+    }
+    setSpeaking(false);
+    setTtsLoading(false);
+  };
+
+  // Stop playback and free the object URL if the message unmounts mid-play.
+  useEffect(() => {
+    return () => {
+      ttsReqRef.current++;
+      audioRef.current?.pause();
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      if (synthRef.current && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const speakWithBrowser = (plain: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(plain);
     try {
       const vn = localStorage.getItem(VOICE_KEY);
@@ -506,11 +589,52 @@ export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerate
     } catch {
       /* ignore */
     }
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
+    u.onend = () => { synthRef.current = false; setSpeaking(false); };
+    u.onerror = () => { synthRef.current = false; setSpeaking(false); };
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
+    synthRef.current = true;
     setSpeaking(true);
+  };
+
+  const speak = async () => {
+    // Toggle off: a second click stops playback (or cancels the load).
+    if (speaking || ttsLoading) {
+      stopSpeak();
+      return;
+    }
+    const plain = message.content
+      .replace(/```[\s\S]*?```/g, ' code block ')
+      .replace(/[#*`_>~|]/g, '');
+    if (!plain.trim()) return;
+    const req = ++ttsReqRef.current;
+    setTtsLoading(true);
+    try {
+      const blob = await ttsSpeak(plain); // neural MP3 from the backend
+      if (req !== ttsReqRef.current) return; // user cancelled while loading
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audioUrlRef.current = url;
+      const done = () => {
+        if (audioUrlRef.current === url) {
+          URL.revokeObjectURL(url);
+          audioUrlRef.current = null;
+        }
+        if (audioRef.current === audio) audioRef.current = null;
+        setSpeaking(false);
+      };
+      audio.onended = done;
+      audio.onerror = done;
+      await audio.play();
+      if (req !== ttsReqRef.current) return; // raced with a stop click
+      setSpeaking(true);
+    } catch {
+      // Backend TTS down/unreachable — fall back to the browser voice.
+      if (req === ttsReqRef.current) speakWithBrowser(plain);
+    } finally {
+      if (req === ttsReqRef.current) setTtsLoading(false);
+    }
   };
   const doTranslate = (lang: string) => {
     setTMenu(false);
@@ -684,6 +808,9 @@ export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerate
         {streaming && (
           <span className="inline-block w-[3px] h-[1.05em] align-text-bottom bg-[var(--accent-fg)] rounded-[1px] animate-pulse ml-0.5" />
         )}
+
+        {/* Interactive quiz (from /quiz) — renders below the "Quiz ready!" text */}
+        {(message.quizData?.length ?? 0) > 0 && <QuizCard questions={message.quizData!} />}
 
         {/* Generated image (from /image) — card with hover toolbar + click-to-expand */}
         {typeof message.imageUrl === 'string' && message.imageUrl.length > 0 && (
@@ -949,9 +1076,14 @@ export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerate
           <IconButton onClick={handleCopy} title="Copy">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           </IconButton>
-          <IconButton onClick={speak} title={speaking ? 'Stop' : 'Read aloud'}>
-            {speaking ? (
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+          <IconButton onClick={speak} title={ttsLoading ? 'Cancel' : speaking ? 'Stop' : 'Read aloud'}>
+            {ttsLoading ? (
+              <svg className="w-3.5 h-3.5 animate-spin text-[var(--accent-fg)]" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" className="opacity-20" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            ) : speaking ? (
+              <svg className="w-3.5 h-3.5 text-[var(--accent-fg)]" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
             ) : (
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5L6 9H2v6h4l5 4V5z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" /></svg>
             )}
@@ -979,3 +1111,8 @@ export function ChatMessage({ message, onEdit, onDelete, onVariant, onRegenerate
     </div>
   );
 }
+
+// Memoized: during streaming the message list re-renders on every token, but
+// only the streaming message's object identity changes — settled messages
+// (markdown, highlighting, KaTeX — all expensive) skip re-rendering entirely.
+export const ChatMessage = memo(ChatMessageInner);

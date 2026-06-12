@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import toast from 'react-hot-toast';
 import { Logo } from '@/components/layout/Logo';
@@ -71,6 +71,33 @@ export function AuthScreen() {
   const { login } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [loading, setLoading] = useState(false);
+
+  // ── 3D tilt: the card subtly follows the cursor (GPU transform only, rAF-
+  // throttled). Max ±4° keeps it premium rather than gimmicky; resets on leave.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
+  const onTilt = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = cardRef.current;
+    if (!card || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const { clientX, clientY } = e;
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const r = card.getBoundingClientRect();
+      const px = (clientX - r.left) / r.width; // 0..1
+      const py = (clientY - r.top) / r.height;
+      card.style.setProperty('--rx', `${((0.5 - py) * 8).toFixed(2)}deg`);
+      card.style.setProperty('--ry', `${((px - 0.5) * 8).toFixed(2)}deg`);
+      card.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`);
+      card.style.setProperty('--my', `${(py * 100).toFixed(1)}%`);
+    });
+  };
+  const resetTilt = () => {
+    const card = cardRef.current;
+    if (!card) return;
+    cancelAnimationFrame(rafRef.current);
+    card.style.setProperty('--rx', '0deg');
+    card.style.setProperty('--ry', '0deg');
+  };
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -161,7 +188,7 @@ export function AuthScreen() {
   };
 
   const btn =
-    'w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[var(--accent)] to-[var(--accent-strong)] hover:shadow-[0_0_28px_-6px_rgba(239,68,68,0.6)] transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed';
+    'btn-shine w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-strong)] hover:shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--accent)_65%,transparent)] hover:-translate-y-px transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed';
   const linkCls = 'text-[var(--accent-fg)] font-medium hover:underline';
   const codeInput = (
     <Field
@@ -176,16 +203,49 @@ export function AuthScreen() {
   );
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center px-4 text-[var(--ink)]">
-      <div className="w-full max-w-md bg-[var(--panel)] backdrop-blur-xl border border-[var(--line)] rounded-2xl shadow-2xl p-8">
+    <div className="relative min-h-screen w-full flex items-center justify-center px-4 text-[var(--ink)] overflow-hidden">
+      {/* ── Brand layer: the Aperture glyph as environment ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+        <div className="brand-glyph" />
+        <div className="grain-overlay" />
+      </div>
+
+      {/* ── Card: entrance + cursor-follow 3D tilt + rotating border beam ── */}
+      <div
+        ref={cardRef}
+        onMouseMove={onTilt}
+        onMouseLeave={resetTilt}
+        className="relative w-full max-w-md animate-card-in"
+        style={{
+          transform: 'perspective(1200px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))',
+          transition: 'transform 0.18s ease-out',
+          transformStyle: 'preserve-3d',
+        }}
+      >
+        <div
+          className="relative w-full bg-[var(--panel)] backdrop-blur-xl border border-[var(--line)] rounded-2xl p-8"
+          style={{
+            boxShadow:
+              '0 28px 80px -28px rgba(0,0,0,0.6), 0 10px 32px -14px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 rgba(255,255,255,0.05)',
+          }}
+        >
+          {/* Specular highlight that follows the cursor */}
+          <div
+            className="absolute inset-0 rounded-2xl pointer-events-none"
+            aria-hidden
+            style={{ background: 'radial-gradient(420px circle at var(--mx, 50%) var(--my, 28%), rgba(255,255,255,0.075), transparent 46%)' }}
+          />
+          <div className="relative">
         <div className="flex flex-col items-center mb-7">
-          <Logo size={52} />
+          <div style={{ filter: 'drop-shadow(0 14px 22px color-mix(in srgb, var(--accent) 30%, transparent))' }}>
+            <Logo size={52} />
+          </div>
           <h1 className="mt-4 text-xl font-semibold tracking-tight">{titles[mode][0]}</h1>
           <p className="text-sm text-[var(--ink-3)] mt-1 text-center">{titles[mode][1]}</p>
         </div>
 
         {mode === 'signin' && (
-          <form onSubmit={doSignin} className="space-y-4">
+          <form onSubmit={doSignin} className="space-y-4 auth-stagger">
             <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
             <PasswordField label="Password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
             <div className="text-right -mt-1">
@@ -201,7 +261,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'signup' && (
-          <form onSubmit={doSignup} className="space-y-4">
+          <form onSubmit={doSignup} className="space-y-4 auth-stagger">
             <Field label="Full name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" />
             <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
             <Field label="Phone number" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543210" autoComplete="tel" />
@@ -214,7 +274,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'otp' && (
-          <form onSubmit={doVerify} className="space-y-4">
+          <form onSubmit={doVerify} className="space-y-4 auth-stagger">
             {codeInput}
             <button type="submit" disabled={loading || code.length < 6} className={btn}>{loading ? 'Verifying…' : 'Verify & continue'}</button>
             <div className="flex items-center justify-between text-sm">
@@ -225,7 +285,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'forgot' && (
-          <form onSubmit={doForgot} className="space-y-4">
+          <form onSubmit={doForgot} className="space-y-4 auth-stagger">
             <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" autoFocus />
             <button type="submit" disabled={loading} className={btn}>{loading ? 'Sending…' : 'Send reset code'}</button>
             <p className="text-center text-sm">
@@ -235,7 +295,7 @@ export function AuthScreen() {
         )}
 
         {mode === 'reset' && (
-          <form onSubmit={doReset} className="space-y-4">
+          <form onSubmit={doReset} className="space-y-4 auth-stagger">
             {codeInput}
             <PasswordField label="New password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" minLength={8} />
             <button type="submit" disabled={loading || code.length < 6} className={btn}>{loading ? 'Resetting…' : 'Reset password'}</button>
@@ -249,6 +309,8 @@ export function AuthScreen() {
         <p className="mt-7 pt-5 border-t border-[var(--line)] text-center text-[11px] text-[var(--ink-4)]">
           Powered by <span className="text-[var(--accent-fg)] font-medium">Fluxera</span>
         </p>
+          </div>
+        </div>
       </div>
     </div>
   );

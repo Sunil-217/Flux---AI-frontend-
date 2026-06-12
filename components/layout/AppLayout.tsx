@@ -4,12 +4,31 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
+import { ContextRail } from '@/components/chat/ContextRail';
+import { LibraryView } from '@/components/layout/LibraryView';
+import { Logo } from '@/components/layout/Logo';
 import { CommandPalette, type PaletteAction } from '@/components/layout/CommandPalette';
 import { ShortcutsModal } from '@/components/layout/ShortcutsModal';
 import { PromptLibraryModal } from '@/components/layout/PromptLibraryModal';
 import { AddUrlModal } from '@/components/layout/AddUrlModal';
 import { ConfirmModal } from '@/components/layout/Dialogs';
-import { CodeView } from '@/components/layout/CodeView';
+import dynamic from 'next/dynamic';
+
+// Code mode pulls in CodeMirror (editor + 16 language packs + merge view) — far
+// too heavy for the chat-first initial bundle. Loaded only when the user
+// actually switches to Code mode.
+const CodeView = dynamic(
+  () => import('@/components/layout/CodeView').then((m) => m.CodeView),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="flex-1 flex items-center justify-center gap-2.5 text-sm text-[var(--ink-3)]">
+        <Logo size={22} animated />
+        Loading Code mode…
+      </main>
+    ),
+  }
+);
 import { useChatSessions } from '@/hooks/useChatSessions';
 import { useCodeSessions } from '@/hooks/useCodeSessions';
 import { useChat } from '@/hooks/useChat';
@@ -27,6 +46,11 @@ import {
   generateExcel,
   generateWord,
   generatePpt,
+  deepResearch,
+  generateQuiz,
+  uploadYoutube,
+  uploadGithub,
+  extractMemory,
 } from '@/services/api';
 import type { HistoryMessage } from '@/services/api';
 import { v4 as uuidv4 } from 'uuid';
@@ -59,6 +83,7 @@ export function AppLayout() {
   const [promptLibOpen, setPromptLibOpen] = useState(false);
   const [addUrlOpen, setAddUrlOpen] = useState(false);
   const [mode, setMode] = useState<'chat' | 'code'>('chat');
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
   const prevLoading = useRef(false);
@@ -181,14 +206,49 @@ export function AppLayout() {
       if (!activeSessionId) return false;
       let url = raw.trim();
       if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-      const tid = toast.loading('Reading the page…');
+
+      // Route by hostname: YouTube videos and GitHub repos have dedicated
+      // indexers (transcript / repo code); everything else is a generic page.
+      let kind: 'youtube' | 'github' | 'page' = 'page';
       try {
-        const source = await uploadUrl(url, activeSessionId);
-        toast.success('Page added — ask anything about it', { id: tid });
+        const u = new URL(url);
+        const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+        const path = u.pathname;
+        if (
+          (host === 'youtube.com' || host === 'm.youtube.com') &&
+          (path === '/watch' || path.startsWith('/shorts/'))
+        ) {
+          kind = 'youtube';
+        } else if (host === 'youtu.be' && path.length > 1) {
+          kind = 'youtube';
+        } else if (host === 'github.com' && path.split('/').filter(Boolean).length >= 2) {
+          // github.com/{owner}/{repo} — repo root or anything deeper.
+          kind = 'github';
+        }
+      } catch {
+        /* unparseable — let the generic uploader reject it */
+      }
+
+      const tid = toast.loading(
+        kind === 'youtube' ? 'Fetching video transcript…' :
+        kind === 'github' ? 'Indexing repository…' :
+        'Reading the page…'
+      );
+      try {
+        const source =
+          kind === 'youtube' ? await uploadYoutube(url, activeSessionId) :
+          kind === 'github' ? await uploadGithub(url, activeSessionId) :
+          await uploadUrl(url, activeSessionId);
+        toast.success(
+          kind === 'youtube' ? 'Video indexed — ask away!' :
+          kind === 'github' ? 'Repo indexed — ask about the code!' :
+          'Page added — ask anything about it',
+          { id: tid }
+        );
         addUploadedFile(activeSessionId, source);
         return true;
       } catch (e) {
-        toast.error(apiError(e, 'Could not add that page.'), { id: tid });
+        toast.error(apiError(e, 'Could not add that link.'), { id: tid });
         return false;
       }
     },
@@ -216,6 +276,122 @@ export function AppLayout() {
   }, [activeSession]);
 
   // ── Message handlers ──────────────────────────────────────────────────────
+
+  // Most-recent assistant ANSWER text — source material for quizzes and the
+  // "convert this content" style file generation. Skips empty media cards;
+  // capped so generation prompts stay within the backend's limit.
+  const lastAssistantContent = useCallback((): string | null => {
+    const msgs = activeSession?.messages ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role === 'assistant' && m.content && m.content.trim().length > 20) {
+        return m.content.trim().slice(0, 7000);
+      }
+    }
+    return null;
+  }, [activeSession]);
+
+  // Deep research: /research <question> (or NL "deep research …"). Mirrors the
+  // /pdf flow — user bubble + assistant placeholder, then patch in the report.
+  const handleResearch = useCallback(
+    async (question: string, displayLabel?: string) => {
+      const sid = activeSessionId;
+      if (!sid) return;
+      const q = question.trim();
+      if (!q) {
+        toast.error('Type a question after /research');
+        return;
+      }
+      addMessage(sid, {
+        id: uuidv4(),
+        role: 'user',
+        content: (displayLabel?.trim() || `/research ${q}`).trim(),
+        timestamp: Date.now(),
+      });
+      const aId = uuidv4();
+      addMessage(sid, {
+        id: aId,
+        role: 'assistant',
+        content: '**Deep research in progress** — searching and reading multiple sources (30–90s).',
+        timestamp: Date.now(),
+      });
+      try {
+        const { report, sources } = await deepResearch(q);
+        patchMessage(sid, aId, {
+          content: report,
+          // Map web sources into the app's Source shape so the existing
+          // citation chips render them (chip label = page title, expanded
+          // passage = the URL the claim came from).
+          sources: sources.map((s) => ({
+            source: s.url,
+            content: s.url,
+            metadata: { filename: s.title || s.url },
+          })),
+        });
+      } catch (e) {
+        // The media error-card pattern is keyed to `pending` kinds (image/pdf/…),
+        // so a friendly inline message is clearer here than `error: true`.
+        patchMessage(sid, aId, {
+          content: `⚠️ **Deep research failed** — ${apiError(e, 'please try again in a moment.')}`,
+        });
+      }
+    },
+    [activeSessionId, addMessage, patchMessage]
+  );
+
+  // Quiz: /quiz [topic or count] (or NL "quiz podu" / "make a quiz").
+  // Source priority: explicit topic → this chat's indexed docs → last answer.
+  const handleQuiz = useCallback(
+    async (arg?: string, displayLabel?: string) => {
+      const sid = activeSessionId;
+      if (!sid) return;
+      const trimmed = (arg ?? '').trim();
+      // A bare number ("/quiz 10") sets the question count; anything else is a topic.
+      const isCount = /^\d{1,2}$/.test(trimmed);
+      const count = isCount ? Math.min(Math.max(parseInt(trimmed, 10), 1), 20) : undefined;
+      const topic = isCount ? '' : trimmed;
+
+      const hasDocs =
+        (activeSession?.uploadedFiles?.length ?? 0) > 0 || !!activeSession?.uploadedFile;
+      const prior = lastAssistantContent();
+
+      let body: { chat_id?: string; content?: string; count?: number };
+      if (topic) body = { content: topic, count };
+      else if (hasDocs) body = { chat_id: sid, count };
+      else if (prior) body = { content: prior, count };
+      else {
+        toast.error('Upload a doc or chat first, then ask for a quiz.');
+        return;
+      }
+
+      addMessage(sid, {
+        id: uuidv4(),
+        role: 'user',
+        content: (displayLabel?.trim() || `/quiz${trimmed ? ` ${trimmed}` : ''}`).trim(),
+        timestamp: Date.now(),
+      });
+      const aId = uuidv4();
+      addMessage(sid, {
+        id: aId,
+        role: 'assistant',
+        content: 'Generating quiz…',
+        timestamp: Date.now(),
+      });
+      try {
+        const questions = await generateQuiz(body);
+        if (questions.length === 0) throw new Error('empty quiz');
+        patchMessage(sid, aId, {
+          content: '**Quiz ready.** Answer the questions below.',
+          quizData: questions,
+        });
+      } catch (e) {
+        patchMessage(sid, aId, {
+          content: `⚠️ **Couldn't generate a quiz** — ${apiError(e, 'please try again in a moment.')}`,
+        });
+      }
+    },
+    [activeSessionId, activeSession, addMessage, patchMessage, lastAssistantContent]
+  );
 
   // Generate-slash-command handler: /image, /video, /pdf. Each adds a user
   // message + a placeholder assistant message, then patches the assistant
@@ -324,6 +500,20 @@ export function AppLayout() {
         return;
       }
 
+      // /research <question> — multi-source deep research with citations.
+      const researchSlash = content.match(/^\/research\b\s*([\s\S]*)/i);
+      if (researchSlash) {
+        handleResearch(researchSlash[1]);
+        return;
+      }
+
+      // /quiz [topic or count] — interactive quiz from docs / last answer / topic.
+      const quizSlash = content.match(/^\/quiz\b\s*([\s\S]*)/i);
+      if (quizSlash) {
+        handleQuiz(quizSlash[1]);
+        return;
+      }
+
       // ── Natural-language intent detection for /image and /pdf ──────────────
       // Lets the user just say "draw a dog", "make a pdf about cats", "convert
       // this to pdf", "give me a pdf of X" — no slash needed, like Claude.
@@ -331,6 +521,32 @@ export function AppLayout() {
       // returning an image") never false-fire.
       const text = content.trim();
       const startsWithSlash = text.startsWith('/');
+
+      // NL deep research: "deep research <q>" or Tanglish "… research panni/pannu".
+      if (
+        !startsWithSlash &&
+        (/^deep\s+research\b/i.test(text) || /\bresearch\s+pann[iu]\b/i.test(text))
+      ) {
+        const q = text
+          .replace(/^deep\s+research\b[:,\s]*/i, '')
+          .replace(/\bresearch\s+pann[iu]\b/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        handleResearch(q || text, text);
+        return;
+      }
+
+      // NL quiz: "quiz podu" / "make a quiz" / "quiz generate" / "generate a quiz".
+      if (
+        !startsWithSlash &&
+        (/\bquiz\s+podu\b/i.test(text) ||
+          /\bmake\s+a\s+quiz\b/i.test(text) ||
+          /\bquiz\s+generate\b/i.test(text) ||
+          /\bgenerate\s+a?\s*quiz\b/i.test(text))
+      ) {
+        handleQuiz('', text);
+        return;
+      }
       const looksLikeCode = /\b(function|code|class|method|api|endpoint|script|program|backend|frontend|server|route|database|sql|html|css|javascript|typescript|python|java|component|library|framework|module|import|return|variable|array|loop)\b/i.test(content);
       const tooLong = content.length > 400;
       // Questions are requests for information, not generation.
@@ -373,20 +589,6 @@ export function AppLayout() {
             .replace(/\s+/g, ' ')
             .trim();
           if (stripped.length >= 2) return stripped.slice(0, 200);
-        }
-        return null;
-      };
-
-      // Most-recent assistant ANSWER text — the source when the user asks to turn
-      // "this content" into a file. Skips empty media cards; capped so the
-      // generation prompt stays within the backend's limit.
-      const lastAssistantContent = (): string | null => {
-        const msgs = activeSession?.messages ?? [];
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const m = msgs[i];
-          if (m.role === 'assistant' && m.content && m.content.trim().length > 20) {
-            return m.content.trim().slice(0, 7000);
-          }
         }
         return null;
       };
@@ -491,7 +693,7 @@ export function AppLayout() {
           .catch(() => {});
       }
     },
-    [sendMessage, buildHistory, activeSessionId, activeSession, updateSession, handleSlashGenerate]
+    [sendMessage, buildHistory, activeSessionId, activeSession, updateSession, handleSlashGenerate, handleResearch, handleQuiz, lastAssistantContent]
   );
 
   // Edit: update the user bubble, trim subsequent messages, re-ask the AI
@@ -654,6 +856,11 @@ export function AppLayout() {
     if (!last || last.role !== 'assistant' || !last.content.trim()) return;
     const userBefore = [...msgs].slice(0, -1).reverse().find((m) => m.role === 'user');
     if (!userBefore) return;
+    // Fire-and-forget: distill durable user facts from this exchange into
+    // long-term memory. Skipped for slash commands — they aren't conversational.
+    if (!userBefore.content.trim().startsWith('/')) {
+      extractMemory(userBefore.content, last.content);
+    }
     let cancelled = false;
     getFollowups(userBefore.content, last.content).then((qs) => {
       if (!cancelled) setFollowups(qs);
@@ -706,7 +913,24 @@ export function AppLayout() {
         }}
         onDeleteCodeSession={deleteCodeSession}
         onRenameCodeSession={renameCodeSession}
+        onOpenLibrary={() => {
+          setLibraryOpen(true);
+          setIsSidebarOpen(false);
+        }}
       />
+
+      {libraryOpen && (
+        <LibraryView
+          sessions={sessions}
+          folders={folders}
+          onOpenSession={(id) => {
+            setActiveSessionId(id);
+            setMode('chat');
+            setLibraryOpen(false);
+          }}
+          onClose={() => setLibraryOpen(false)}
+        />
+      )}
 
       {mode === 'code' ? (
         <CodeView
@@ -722,6 +946,7 @@ export function AppLayout() {
           }}
         />
       ) : (
+        <div className="flex-1 flex min-w-0">
         <ChatArea
           session={activeSession}
           isLoading={isLoading}
@@ -743,7 +968,19 @@ export function AppLayout() {
           followups={followups}
           onPickFollowup={handleSendMessage}
           injectText={draft}
+          allSessions={sessions}
+          allFolders={folders}
+          onSelectSession={handleSelectSession}
         />
+        {/* The Context Rail — live session intelligence: verbs, persona,
+            knowledge, memory. Workspace, not chatbot. */}
+        <ContextRail
+          session={activeSession}
+          onAddUrl={handleAddUrl}
+          onResearch={() => usePrompt('/research ')}
+          onQuiz={() => handleSendMessage('/quiz')}
+        />
+        </div>
       )}
 
       {paletteOpen && (

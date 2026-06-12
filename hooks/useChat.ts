@@ -41,6 +41,7 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
       let assistantId: string | null = null;
       let acc = '';
       let pendingSources: Source[] | undefined;
+      let streamError = false;
 
       const handlers: StreamHandlers = {
         onToken: (t) => {
@@ -62,15 +63,18 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
           pendingSources = s;
           if (assistantId) patchMessage(sessionId, assistantId, { sources: s });
         },
-        onError: () => toast.error('Failed to get a response. Please try again.'),
+        onError: (message) => {
+          streamError = true;
+          toast.error(message || 'Failed to get a response. Please try again.');
+        },
       };
 
       try {
         await streamQuestion(sessionId, content, history, handlers, image, controller.signal);
-        if (!assistantId) toast.error('No response received. Please try again.');
+        if (!assistantId && !streamError) toast.error('No response received. Please try again.');
       } catch (err) {
         // A user-triggered stop (AbortError) is not an error — keep the partial reply.
-        if ((err as Error)?.name !== 'AbortError') {
+        if ((err as Error)?.name !== 'AbortError' && !streamError) {
           toast.error('Failed to get a response. Please try again.');
         }
       } finally {
@@ -120,18 +124,22 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
       const controller = new AbortController();
       abortRef.current = controller;
       let acc = '';
+      let streamError = false;
       const handlers: StreamHandlers = {
         onToken: (t) => {
           acc += t;
           patchVariant(sessionId, assistantId, acc);
         },
         onSources: (s) => patchMessage(sessionId, assistantId, { sources: s }),
-        onError: () => toast.error('Failed to get a response. Please try again.'),
+        onError: (message) => {
+          streamError = true;
+          toast.error(message || 'Failed to get a response. Please try again.');
+        },
       };
       try {
         await streamQuestion(sessionId, content, history, handlers, undefined, controller.signal);
       } catch (err) {
-        if ((err as Error)?.name !== 'AbortError') {
+        if ((err as Error)?.name !== 'AbortError' && !streamError) {
           toast.error('Failed to get a response. Please try again.');
         }
       } finally {

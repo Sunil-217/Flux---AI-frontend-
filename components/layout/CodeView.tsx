@@ -22,6 +22,7 @@ import {
 import { CodeMirrorEditor } from '@/components/code/CodeMirrorEditor';
 import { DiffViewer } from '@/components/code/DiffViewer';
 import { langLabel } from '@/components/code/cmLang';
+import { PromptModal, ConfirmModal } from '@/components/layout/Dialogs';
 import type { CodeChatMessage, CodeStep } from '@/types';
 
 type StepStatus = CodeStep['status'];
@@ -116,20 +117,62 @@ export function CodeView({
   const [busy, setBusy] = useState(false);
   const msgId = useRef(sessionMessages.reduce((mx, m) => Math.max(mx, m.id), 0) + 1);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  // Each code chat remembers its own folder handle (in-memory, this page load) so
+  // switching chats restores that chat's workspace — like Claude Code per-project.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dirHandlesRef = useRef<Map<string, any>>(new Map());
 
   // Quick-open (Ctrl/Cmd+P) palette.
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickQuery, setQuickQuery] = useState('');
+
+  // Themed dialogs for file operations (no native window.prompt/confirm).
+  const [promptCfg, setPromptCfg] = useState<{
+    title: string;
+    placeholder?: string;
+    initialValue?: string;
+    onSubmit: (v: string) => void;
+  } | null>(null);
+  const [confirmCfg, setConfirmCfg] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   useEffect(() => setSupported(fsSupported()), []);
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
 
-  // Switching to a different code chat → load that conversation's messages.
+  // Switching to a different code chat → load THAT chat's conversation and restore
+  // (or clear) its own folder workspace. A new chat with no folder shows the
+  // "Open folder" picker; an existing chat reopens the folder it was using.
   useEffect(() => {
     setMessages(sessionMessages);
     msgId.current = sessionMessages.reduce((mx, m) => Math.max(mx, m.id), 0) + 1;
+    // reset editor workspace for the switch
+    setOpenTabs([]);
+    setActiveTab(null);
+    setFileContents({});
+    setDirty({});
+    setProposals({});
+    setShowDiff({});
+    setQuery('');
+    setSearchQuery('');
+    setSearchHits([]);
+    // restore this chat's folder if we still hold its handle (this page load)
+    const handle = dirHandlesRef.current.get(sessionId);
+    if (handle) {
+      setDir(handle);
+      setFolderName(handle.name || 'folder');
+      listCodeFiles(handle)
+        .then(setFiles)
+        .catch(() => setFiles([]));
+    } else {
+      setDir(null);
+      setFolderName('');
+      setFiles([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -155,6 +198,7 @@ export function CodeView({
     setLoadingFolder(true);
     try {
       setDir(handle);
+      dirHandlesRef.current.set(sessionId, handle); // remember folder for THIS chat
       const name = handle.name || 'folder';
       setFolderName(name);
       const list = await listCodeFiles(handle);
@@ -266,60 +310,77 @@ export function CodeView({
   const newChat = () => onNewChat();
 
   // ── File operations ────────────────────────────────────────────────────────
-  const newFile = async () => {
+  const newFile = () => {
     if (!dir) return;
-    const path = window.prompt('New file path (relative to the project root):');
-    if (!path || !path.trim()) return;
-    try {
-      await createFile(dir, path.trim());
-      setFiles(await listCodeFiles(dir));
-      openFile(path.trim());
-      toast.success('File created');
-    } catch (e) {
-      toast.error((e as Error)?.message || 'Could not create the file.');
-    }
-  };
-
-  const removeFile = async (path: string) => {
-    if (!dir) return;
-    if (!window.confirm(`Delete ${path}?\nThis permanently removes it from disk and can't be undone.`)) return;
-    try {
-      await deleteFile(dir, path);
-      closeTab(path);
-      setFileContents((c) => {
-        const n = { ...c };
-        delete n[path];
-        return n;
-      });
-      setFiles(await listCodeFiles(dir));
-      toast.success('File deleted');
-    } catch {
-      toast.error('Could not delete the file.');
-    }
-  };
-
-  const doRename = async (path: string) => {
-    if (!dir) return;
-    const np = window.prompt('Rename / move to (relative path):', path);
-    if (!np || !np.trim() || np.trim() === path) return;
-    const target = np.trim();
-    try {
-      await renameFile(dir, path, target);
-      setOpenTabs((t) => t.map((x) => (x === path ? target : x)));
-      setActiveTab((a) => (a === path ? target : a));
-      setFileContents((c) => {
-        const n = { ...c };
-        if (n[path] != null) {
-          n[target] = n[path];
-          delete n[path];
+    setPromptCfg({
+      title: 'New file',
+      placeholder: 'path/to/file.ts (relative to the project root)',
+      onSubmit: async (raw) => {
+        const path = raw.trim();
+        if (!path) return;
+        try {
+          await createFile(dir, path);
+          setFiles(await listCodeFiles(dir));
+          openFile(path);
+          toast.success('File created');
+        } catch (e) {
+          toast.error((e as Error)?.message || 'Could not create the file.');
         }
-        return n;
-      });
-      setFiles(await listCodeFiles(dir));
-      toast.success('Renamed');
-    } catch (e) {
-      toast.error((e as Error)?.message || 'Could not rename.');
-    }
+      },
+    });
+  };
+
+  const removeFile = (path: string) => {
+    if (!dir) return;
+    setConfirmCfg({
+      title: 'Delete file',
+      message: `Delete ${path}? This permanently removes it from disk and can't be undone.`,
+      onConfirm: async () => {
+        try {
+          await deleteFile(dir, path);
+          closeTab(path);
+          setFileContents((c) => {
+            const n = { ...c };
+            delete n[path];
+            return n;
+          });
+          setFiles(await listCodeFiles(dir));
+          toast.success('File deleted');
+        } catch {
+          toast.error('Could not delete the file.');
+        }
+      },
+    });
+  };
+
+  const doRename = (path: string) => {
+    if (!dir) return;
+    setPromptCfg({
+      title: 'Rename / move file',
+      placeholder: 'new/relative/path',
+      initialValue: path,
+      onSubmit: async (raw) => {
+        const target = raw.trim();
+        if (!target || target === path) return;
+        try {
+          await renameFile(dir, path, target);
+          setOpenTabs((t) => t.map((x) => (x === path ? target : x)));
+          setActiveTab((a) => (a === path ? target : a));
+          setFileContents((c) => {
+            const n = { ...c };
+            if (n[path] != null) {
+              n[target] = n[path];
+              delete n[path];
+            }
+            return n;
+          });
+          setFiles(await listCodeFiles(dir));
+          toast.success('Renamed');
+        } catch (e) {
+          toast.error((e as Error)?.message || 'Could not rename.');
+        }
+      },
+    });
   };
 
   // ── Project search ──────────────────────────────────────────────────────────
@@ -525,20 +586,10 @@ export function CodeView({
         <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
           <p className="text-sm text-[var(--ink-2)]">Folder access needs <strong>Chrome</strong> or <strong>Edge</strong>.</p>
         </div>
-      ) : !dir ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-          <p className="text-sm text-[var(--ink-2)] mb-1">Open a project folder to start coding.</p>
-          <p className="text-xs text-[var(--ink-4)] mb-5 max-w-sm">
-            A real editor, AI agent, and diff review — all in the browser. The agent plans, edits, and
-            you accept the diffs. Terminal commands aren&apos;t available in a browser.
-          </p>
-          <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
-            {loadingFolder ? 'Reading…' : 'Open folder'}
-          </button>
-        </div>
       ) : (
         <div className="flex-1 flex min-h-0">
+          {dir ? (
+          <>
           {/* LEFT — file tree / search */}
           <div className="w-56 flex-shrink-0 border-r border-[var(--line)] flex flex-col min-h-0">
             <div className="flex items-center border-b border-[var(--line)] text-xs">
@@ -684,8 +735,22 @@ export function CodeView({
               </>
             )}
           </div>
+          </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-8 border-r border-[var(--line)]">
+              <p className="text-sm text-[var(--ink-2)] mb-1">Open a project folder for this chat.</p>
+              <p className="text-xs text-[var(--ink-4)] mb-5 max-w-sm">
+                Each code chat has its own folder + memory (like Claude Code). The agent plans, edits,
+                and you accept the diffs. Terminal commands aren&apos;t available in a browser.
+              </p>
+              <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
+                {loadingFolder ? 'Reading…' : 'Open folder'}
+              </button>
+            </div>
+          )}
 
-          {/* RIGHT — AI agent chat */}
+          {/* RIGHT — AI agent chat (always visible so each chat's conversation shows) */}
           <div className="w-80 flex-shrink-0 flex flex-col min-h-0">
             <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--line)]">
               <span className="text-xs font-medium text-[var(--ink-2)]">Agent</span>
@@ -695,7 +760,7 @@ export function CodeView({
                     Accept all ({proposalPaths.length})
                   </button>
                 )}
-                <button onClick={newChat} title="New chat — clears this project's memory" className="text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">
+                <button onClick={newChat} title="New code chat (its own folder + memory)" className="text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">
                   New chat
                 </button>
               </div>
@@ -756,12 +821,12 @@ export function CodeView({
                       send();
                     }
                   }}
-                  disabled={busy}
+                  disabled={busy || !dir}
                   rows={1}
-                  placeholder="Ask to build, change, or explain…"
+                  placeholder={dir ? 'Ask to build, change, or explain…' : 'Open a folder to start…'}
                   className="flex-1 resize-none bg-[var(--fill)] border border-[var(--line)] rounded-xl px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] disabled:opacity-60 max-h-28"
                 />
-                <button onClick={send} disabled={busy || !input.trim()} className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <button onClick={send} disabled={busy || !input.trim() || !dir} className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.3} d="M12 19V5M5 12l7-7 7 7" /></svg>
                 </button>
               </div>
@@ -797,6 +862,27 @@ export function CodeView({
             </div>
           </div>
         </div>
+      )}
+
+      {promptCfg && (
+        <PromptModal
+          title={promptCfg.title}
+          placeholder={promptCfg.placeholder}
+          initialValue={promptCfg.initialValue}
+          confirmLabel={promptCfg.initialValue ? 'Save' : 'Create'}
+          onSubmit={promptCfg.onSubmit}
+          onClose={() => setPromptCfg(null)}
+        />
+      )}
+      {confirmCfg && (
+        <ConfirmModal
+          title={confirmCfg.title}
+          message={confirmCfg.message}
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmCfg.onConfirm}
+          onClose={() => setConfirmCfg(null)}
+        />
       )}
     </main>
   );

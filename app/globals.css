@@ -39,10 +39,12 @@
   --grad-mid: #f87171;
   --grad-to: #ef4444;
 
-  /* barely-there glow so pure black still has a hint of depth */
+  /* Ambient glow — the large top-right wash follows the user-picked accent so
+     the whole surface (most visibly the near-empty home page) re-tints when the
+     accent changes. var(--accent) resolves lazily, so no JS needs to set this. */
   --glow:
     radial-gradient(60rem 44rem at 12% -14%, rgba(255, 255, 255, 0.025), transparent 60%),
-    radial-gradient(54rem 44rem at 108% 0%, rgba(217, 119, 87, 0.035), transparent 55%);
+    radial-gradient(54rem 44rem at 108% 0%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 55%);
 
   --ring-offset: #000000;
   --scroll-thumb: rgba(245, 240, 230, 0.13);
@@ -83,7 +85,7 @@
 
   --glow:
     radial-gradient(60rem 44rem at 12% -14%, rgba(217, 119, 87, 0.07), transparent 60%),
-    radial-gradient(54rem 44rem at 108% 0%, rgba(217, 119, 87, 0.05), transparent 55%);
+    radial-gradient(54rem 44rem at 108% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%);
 
   --ring-offset: #faf9f5;
   --scroll-thumb: rgba(50, 42, 28, 0.18);
@@ -136,14 +138,16 @@ body {
   background-clip: padding-box;
 }
 
+/* Accent-aware (follows the user's chosen accent instead of hardcoded red). */
 ::selection {
-  background: rgba(239, 68, 68, 0.32);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--ink);
 }
 
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--ring-offset), 0 0 0 4px rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 0 2px var(--ring-offset),
+    0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 textarea:focus-visible,
 input:focus-visible {
@@ -200,12 +204,87 @@ input:focus-visible {
   animation: shimmer 1.4s linear infinite;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Production 3D scene (auth + modals). GPU-only properties (transform/opacity/
+   filter) — no layout thrash, battery-friendly, 60fps even on low-end machines.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── Brand layer: the Aperture glyph as environment. One giant, ultra-faint,
+   cropped rendering of the mark anchored top-right of entry surfaces (the
+   Stripe school: the symbol itself is the scenery). Accent-aware via mask;
+   static; zero JS. ── */
+.brand-glyph {
+  position: absolute;
+  top: -14%;
+  right: -12%;
+  width: min(64vh, 62%);
+  aspect-ratio: 1 / 1;
+  transform: rotate(-10deg);
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%23fff'/%3E%3Ccircle cx='56' cy='50' r='23' fill='%23000'/%3E%3Crect x='56' y='41' width='44' height='18' rx='9' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%23fff'/%3E%3Ccircle cx='56' cy='50' r='23' fill='%23000'/%3E%3Crect x='56' y='41' width='44' height='18' rx='9' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Card entrance — rises out of the page in perspective. */
+@keyframes card-in {
+  from { opacity: 0; transform: perspective(1200px) rotateX(7deg) translateY(26px) scale(0.97); }
+  to   { opacity: 1; transform: perspective(1200px) rotateX(0deg) translateY(0) scale(1); }
+}
+.animate-card-in { animation: card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Staggered content reveal inside the card. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.auth-stagger > * { opacity: 0; animation: rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.auth-stagger > *:nth-child(1) { animation-delay: 0.10s; }
+.auth-stagger > *:nth-child(2) { animation-delay: 0.18s; }
+.auth-stagger > *:nth-child(3) { animation-delay: 0.26s; }
+.auth-stagger > *:nth-child(4) { animation-delay: 0.34s; }
+.auth-stagger > *:nth-child(5) { animation-delay: 0.42s; }
+.auth-stagger > *:nth-child(6) { animation-delay: 0.50s; }
+
+/* Button shine — a light sweep across the primary CTA on hover. */
+.btn-shine { position: relative; overflow: hidden; }
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.28) 50%, transparent 62%);
+  transform: translateX(-120%);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.btn-shine:hover::after { transform: translateX(120%); }
+
+/* Film grain — kills banding in the blurred gradients; classic production trick. */
+.grain-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Modal entrance — used by Settings / dialogs for a soft pop-in (v2). */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-modal-in { animation: modal-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-msg-in,
   .animate-glow-pulse,
-  .animate-shimmer {
+  .animate-shimmer,
+  .animate-card-in,
+  .auth-stagger > *,
+  .animate-modal-in {
     animation: none;
   }
+  .auth-stagger > * { opacity: 1; }
 }
 
 /* Export → PDF: window.print() yields a clean, ink-friendly transcript. */

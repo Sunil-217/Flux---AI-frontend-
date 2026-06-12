@@ -11,7 +11,7 @@ import { SummaryModal } from '@/components/layout/SummaryModal';
 import { summarizeConversation, createShare, apiError, WEB_SEARCH_KEY, activeDocsKey } from '@/services/api';
 import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
-import type { ChatSession } from '@/types';
+import type { ChatSession, Folder } from '@/types';
 
 interface Props {
   session: ChatSession | null;
@@ -34,6 +34,11 @@ interface Props {
   followups: string[];
   onPickFollowup: (q: string) => void;
   injectText?: { text: string; n: number } | null;
+  // Workspace Home data: lets the empty state show the Agenda + "continue
+  // where you left off" + knowledge totals instead of a blank-chat greeting.
+  allSessions?: ChatSession[];
+  allFolders?: Folder[];
+  onSelectSession?: (id: string) => void;
 }
 
 export function ChatArea({
@@ -57,6 +62,9 @@ export function ChatArea({
   followups,
   onPickFollowup,
   injectText,
+  allSessions,
+  allFolders,
+  onSelectSession,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -420,7 +428,7 @@ export function ChatArea({
           </div>
         )}
 
-        <AccentPicker />
+        {hasMessages && <AccentPicker />}
 
         <ThemeToggle />
 
@@ -434,6 +442,10 @@ export function ChatArea({
             hasSession={!!session}
             uploadedFile={uploadedFile}
             onNewChat={onNewChat}
+            allSessions={allSessions}
+            allFolders={allFolders}
+            currentSessionId={session?.id}
+            onSelectSession={onSelectSession}
           />
         ) : (
           <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-8 space-y-7">

@@ -23,6 +23,7 @@ export interface Message {
   fileKind?: 'excel' | 'word' | 'ppt'; // what kind of file fileUrl contains
   pending?: 'image' | 'video' | 'pdf' | 'excel' | 'word' | 'ppt'; // media generation in flight
   error?: boolean; // the message represents a generation failure (shows a retry card)
+  quizData?: { q: string; options: string[]; answer: number; explanation: string }[]; // interactive quiz (via /quiz)
   variants?: string[]; // alternate regenerated answers (assistant only)
   variantIndex?: number; // which variant is currently shown
 }

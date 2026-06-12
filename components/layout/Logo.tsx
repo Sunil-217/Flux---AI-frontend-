@@ -1,23 +1,30 @@
+import { useId } from 'react';
+
 interface Props {
   /** Pixel size of the mark. */
   size?: number;
   /** Round (orb) instead of squircle — used for chat avatars. */
   round?: boolean;
-  /** Enable the subtle sparkle / glow animations. */
+  /** Aperture breathing — thinking/loading states only. */
   animated?: boolean;
   className?: string;
 }
 
 /**
- * Close AI brand mark — a clean rounded speech bubble with a soft 4-point AI
- * sparkle nested inside it. Reads instantly as "AI chat" at any size, no
- * letterforms required. The sparkle uses concave Bezier curves (not straight
- * star points) so it stays soft and elegant rather than sharp / Gemini-like.
+ * Close AI brand mark — "The Aperture".
  *
- * SMIL animation inside the SVG → survives hot-reload and re-renders, no JS.
+ * One solid mass with a C carved out of it in negative space: a deep rounded
+ * bite entering from the right edge. The C (Close) is felt, not drawn — the
+ * negative-space school of FedEx's arrow and Apple's bite. Survives 16px and
+ * monochrome because it is a single solid shape with a single cut; a
+ * non-designer can sketch it from memory ("square with a bite on the right").
+ *
+ * No rings, orbits, dots, nodes, sparkles, or gradients. The symbol carries
+ * the brand. `animated` makes the aperture breathe — the only motion, reserved
+ * for thinking/loading.
  */
-export function Logo({ size = 32, round = false, animated = true, className = '' }: Props) {
-  const shape = round ? 'rounded-full' : 'rounded-[28%]';
+export function Logo({ size = 32, round = false, animated = false, className = '' }: Props) {
+  const maskId = useId();
 
   return (
     <span
@@ -25,77 +32,28 @@ export function Logo({ size = 32, round = false, animated = true, className = ''
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      {/* Soft accent halo behind the mark */}
-      <span
-        className={`absolute inset-[-14%] ${shape} bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] blur-lg opacity-45 ${
-          animated ? 'animate-pulse' : ''
-        }`}
-        style={animated ? { animationDuration: '4.5s' } : undefined}
-      />
-
-      {/* Gradient body */}
-      <span
-        className={`relative inline-flex items-center justify-center w-full h-full ${shape} bg-gradient-to-br from-[var(--accent)] via-[var(--accent-strong)] to-[var(--accent-strong)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.22)]`}
+      <svg
+        viewBox="0 0 100 100"
+        className="w-full h-full"
+        style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.28))' }}
       >
-        <svg viewBox="0 0 100 100" style={{ width: '76%', height: '76%' }} fill="none">
-          {/* Speech bubble — rounded rectangle with a small tail at lower-left */}
-          <path
-            d="
-              M 28,18
-              L 76,18
-              Q 86,18 86,28
-              L 86,60
-              Q 86,70 76,70
-              L 46,70
-              L 32,84
-              L 32,70
-              L 28,70
-              Q 18,70 18,60
-              L 18,28
-              Q 18,18 28,18
-              Z
-            "
-            fill="#ffffff"
-          />
-
-          {/* Soft 4-point AI sparkle inside the bubble — concave Bezier petals */}
-          <g transform="translate(52 44)">
-            <path
-              d="
-                M 0,-16
-                Q 3,-3 16,0
-                Q 3,3 0,16
-                Q -3,3 -16,0
-                Q -3,-3 0,-16
-                Z
-              "
-              fill="var(--accent-strong)"
-            >
-              {animated && (
-                <animateTransform
-                  attributeName="transform"
-                  type="rotate"
-                  from="0"
-                  to="360"
-                  dur="14s"
-                  repeatCount="indefinite"
-                />
-              )}
-            </path>
-            {/* Tiny bright pinpoint at the sparkle's center for depth */}
-            <circle cx="0" cy="0" r="2.2" fill="#ffffff">
-              {animated && (
-                <animate
-                  attributeName="r"
-                  values="2.2;3.2;2.2"
-                  dur="2.4s"
-                  repeatCount="indefinite"
-                />
-              )}
-            </circle>
-          </g>
-        </svg>
-      </span>
+        <mask id={maskId}>
+          {/* The mass */}
+          <rect width="100" height="100" rx={round ? 50 : 26} fill="#fff" />
+          {/* The aperture: a round void + a channel opening to the right edge.
+              Channel is narrower than the void, so the remaining mass forms
+              the C's upper and lower lips. */}
+          <circle cx="56" cy="50" r="23" fill="#000">
+            {animated && (
+              <animate attributeName="r" values="23;26;23" dur="1.5s" repeatCount="indefinite" />
+            )}
+          </circle>
+          <rect x="56" y="41" width="44" height="18" rx="9" fill="#000" />
+        </mask>
+        {/* fill via style (not the presentation attribute): var() is guaranteed
+            in CSS properties but not in SVG attribute grammar. */}
+        <rect width="100" height="100" style={{ fill: 'var(--accent)' }} mask={`url(#${maskId})`} />
+      </svg>
     </span>
   );
 }

@@ -65,8 +65,9 @@ export const viewport: Viewport = {
   themeColor: '#000000',
 };
 
-// Applies the saved theme before paint to avoid a flash of the wrong theme.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.classList.add(t);}catch(e){document.documentElement.classList.add('dark');}})();`;
+// Applies the saved theme AND accent before paint — no flash, and the accent
+// works independently of any component mounting (HMR/state-proof).
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.classList.add(t);}catch(e){document.documentElement.classList.add('dark');}try{var v=JSON.parse(localStorage.getItem('close_ai_accent_vars')||'null');if(v&&typeof v==='object'){for(var k in v){if(/^--[a-z-]+$/.test(k)&&typeof v[k]==='string'){document.documentElement.style.setProperty(k,v[k],'important');}}}}catch(e){}})();`;
 
 export default function RootLayout({
   children,

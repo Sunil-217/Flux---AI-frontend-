@@ -4,7 +4,22 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { updateProfile, changePassword, apiError, STYLE_KEY, CUSTOM_INSTRUCTIONS_KEY } from '@/services/api';
+import {
+  updateProfile,
+  changePassword,
+  apiError,
+  STYLE_KEY,
+  CUSTOM_INSTRUCTIONS_KEY,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  getMemoryFacts,
+  clearMemory,
+  deleteMemoryFact,
+  getChats,
+  type ApiKeyInfo,
+} from '@/services/api';
+import type { ChatSession } from '@/types';
 import { useT, getLang, setLang, type Lang } from '@/lib/i18n';
 import { ConfirmModal } from '@/components/layout/Dialogs';
 import { Logo } from '@/components/layout/Logo';
@@ -23,7 +38,17 @@ import {
   applyCodeFont,
 } from '@/components/layout/AccentPicker';
 
-type Tab = 'account' | 'appearance' | 'chat' | 'data' | 'security' | 'about';
+type Tab =
+  | 'account'
+  | 'appearance'
+  | 'chat'
+  | 'data'
+  | 'api'
+  | 'personas'
+  | 'memory'
+  | 'insights'
+  | 'security'
+  | 'about';
 
 const APP_VERSION = '1.0.0';
 const NOTIF_KEY = 'close_ai_notify_on_done';
@@ -70,6 +95,661 @@ function Row({ title, desc, children }: { title: string; desc?: string; children
   );
 }
 
+// API base shown in the quick-start snippet (same one the app itself talks to).
+const PUBLIC_API_BASE =
+  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://127.0.0.1:8000';
+
+/** Developer platform panel: create / list / revoke API keys + quick-start docs. */
+function ApiKeysPanel() {
+  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [freshKey, setFreshKey] = useState<string | null>(null); // shown ONCE
+  const [revokeId, setRevokeId] = useState<number | null>(null);
+
+  const refresh = () =>
+    listApiKeys()
+      .then(setKeys)
+      .catch(() => toast.error('Could not load API keys.'))
+      .finally(() => setLoading(false));
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const create = async () => {
+    if (!newName.trim() || creating) return;
+    setCreating(true);
+    try {
+      const { key } = await createApiKey(newName.trim());
+      setFreshKey(key);
+      setNewName('');
+      refresh();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not create the key.'));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copy = (text: string) => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast.success('Copied'))
+      .catch(() => toast.error('Copy failed — select it manually.'));
+  };
+
+  const active = keys.filter((k) => !k.revoked);
+  const pythonSnippet = `from openai import OpenAI
+
+client = OpenAI(
+    base_url="${PUBLIC_API_BASE}/v1",
+    api_key="ck_...",  # your key
+)
+r = client.chat.completions.create(
+    model="close-chat",  # or "close-code"
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(r.choices[0].message.content)`;
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>API Keys</h3>
+        <p className={subCls}>
+          Use Close AI as a service — generate a key and call the OpenAI-compatible API from your
+          own apps. Limit: 20 requests/min per key.
+        </p>
+      </div>
+
+      {/* Create */}
+      <div className="flex items-center gap-2 mb-5">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && create()}
+          placeholder="Key name (e.g. my-app)"
+          maxLength={60}
+          className={inputCls}
+        />
+        <button onClick={create} disabled={creating || !newName.trim()} className={btnCls}>
+          {creating ? 'Creating…' : 'Create key'}
+        </button>
+      </div>
+
+      {/* Show-once modal block */}
+      {freshKey && (
+        <div className="mb-5 p-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--fill)]">
+          <p className="text-xs font-medium text-[var(--ink)] mb-1.5">
+            Copy your key now — it will never be shown again.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 text-[11px] font-mono text-[var(--accent-fg)] bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-2 break-all select-all">
+              {freshKey}
+            </code>
+            <button onClick={() => copy(freshKey)} className={btnCls}>
+              Copy
+            </button>
+            <button
+              onClick={() => setFreshKey(null)}
+              className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] px-2"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Key list */}
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : active.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)] mb-5">No active keys yet — create one above.</p>
+      ) : (
+        <div className="space-y-2 mb-6">
+          {active.map((k) => (
+            <div
+              key={k.id}
+              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-[var(--fill)]"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--ink)] truncate">{k.name}</p>
+                <p className="text-[11px] font-mono text-[var(--ink-4)]">
+                  {k.prefix} · {k.usage_count} requests · {k.total_tokens} tokens
+                  {k.last_used_at ? ` · last used ${new Date(k.last_used_at).toLocaleDateString()}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setRevokeId(k.id)}
+                className="text-xs font-medium text-red-400 hover:text-red-300 flex-shrink-0"
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick start */}
+      <div className="pt-4 border-t border-[var(--line)]">
+        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Quick start (Python, OpenAI SDK)</p>
+        <div className="relative">
+          <pre className="text-[11px] font-mono text-[var(--ink-2)] bg-[var(--base)] border border-[var(--line)] rounded-xl p-3 overflow-x-auto whitespace-pre">
+            {pythonSnippet}
+          </pre>
+          <button
+            onClick={() => copy(pythonSnippet)}
+            className="absolute top-2 right-2 text-[10px] font-medium rounded-md border border-[var(--line)] bg-[var(--fill)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)]"
+          >
+            Copy
+          </button>
+        </div>
+        <p className="text-[11px] text-[var(--ink-4)] mt-2">
+          Models: <code className="font-mono">close-chat</code> (fast general chat) ·{' '}
+          <code className="font-mono">close-code</code> (strongest coder). Streaming is supported
+          (<code className="font-mono">stream=True</code>).
+        </p>
+      </div>
+
+      {revokeId !== null && (
+        <ConfirmModal
+          title="Revoke key"
+          message="Apps using this key will stop working immediately. This can't be undone."
+          confirmLabel="Revoke"
+          danger
+          onConfirm={() => {
+            revokeApiKey(revokeId)
+              .then(() => {
+                toast.success('Key revoked');
+                refresh();
+              })
+              .catch(() => toast.error('Could not revoke the key.'));
+            setRevokeId(null);
+          }}
+          onClose={() => setRevokeId(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Personas ────────────────────────────────────────────────────────────────
+
+type Persona = { id: string; name: string; emoji: string; prompt: string };
+
+const PERSONAS_KEY = 'close_ai_personas';
+const ACTIVE_PERSONA_KEY = 'close_ai_active_persona';
+// Integration contract: the chat layer reads this key and injects it into the
+// system prompt. Written whenever the active persona changes; removed when none.
+const PERSONA_PROMPT_KEY = 'close_ai_persona_prompt';
+
+const STARTER_PERSONAS: Persona[] = [
+  {
+    id: 'starter-interview-coach',
+    name: 'Interview Coach',
+    emoji: '',
+    prompt:
+      'You are a rigorous but encouraging interview coach. Mock-interview the user for the role they mention. Ask exactly one interview question at a time, wait for their answer, then give short honest feedback — strengths, gaps, and a stronger sample answer — before asking the next question.',
+  },
+  {
+    id: 'starter-tamil-teacher',
+    name: 'Tamil Teacher',
+    emoji: '',
+    prompt:
+      'You are a friendly Tamil teacher. Explain everything bilingually — first in simple English, then in Tamil (தமிழ்) — using simple words and short sentences. Add transliteration alongside Tamil script when it helps a beginner.',
+  },
+  {
+    id: 'starter-code-reviewer',
+    name: 'Code Reviewer',
+    emoji: '',
+    prompt:
+      'You are a meticulous senior code reviewer. When the user pastes code, review it for bugs, security issues, and clean-code improvements. Order findings by severity (critical first, minor last), point to the exact lines, and suggest concrete fixes.',
+  },
+];
+
+// Seed starters only on the very first load (key absent). An explicitly emptied
+// list ('[]') stays empty — deleting all personas must not resurrect them.
+function loadPersonas(): Persona[] {
+  try {
+    const raw = localStorage.getItem(PERSONAS_KEY);
+    if (raw === null) {
+      localStorage.setItem(PERSONAS_KEY, JSON.stringify(STARTER_PERSONAS));
+      return STARTER_PERSONAS;
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Persona[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Custom AI personalities — the active one shapes every chat reply. */
+function PersonasPanel() {
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [activeId, setActiveId] = useState('');
+  const [name, setName] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPersonas(loadPersonas());
+    try {
+      setActiveId(localStorage.getItem(ACTIVE_PERSONA_KEY) || '');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persist = (list: Persona[]) => {
+    setPersonas(list);
+    try {
+      localStorage.setItem(PERSONAS_KEY, JSON.stringify(list));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Single place where the active persona (and its prompt contract key) changes.
+  const setActive = (p: Persona | null) => {
+    setActiveId(p ? p.id : '');
+    try {
+      if (p) {
+        localStorage.setItem(ACTIVE_PERSONA_KEY, p.id);
+        localStorage.setItem(PERSONA_PROMPT_KEY, p.prompt);
+      } else {
+        localStorage.setItem(ACTIVE_PERSONA_KEY, '');
+        localStorage.removeItem(PERSONA_PROMPT_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const create = () => {
+    if (!name.trim() || !prompt.trim()) return;
+    const p: Persona = {
+      id: `persona-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: name.trim(),
+      emoji: '', // avatar is a monogram derived from the name
+      prompt: prompt.trim(),
+    };
+    persist([...personas, p]);
+    setName('');
+    setPrompt('');
+    toast.success('Persona created');
+  };
+
+  const remove = (id: string) => {
+    persist(personas.filter((x) => x.id !== id));
+    if (activeId === id) setActive(null);
+    toast.success('Persona deleted');
+  };
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Personas</h3>
+        <p className={subCls}>The active persona shapes every reply in chat.</p>
+      </div>
+
+      {/* Persona cards */}
+      {personas.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)] mb-6">No personas yet — create one below.</p>
+      ) : (
+        <div className="space-y-2 mb-6">
+          {personas.map((p) => {
+            const isActive = p.id === activeId;
+            return (
+              <div
+                key={p.id}
+                className={`flex items-start gap-3 px-3.5 py-3 rounded-xl border bg-[var(--fill)] transition-colors ${
+                  isActive ? 'border-[var(--accent)]' : 'border-[var(--line)]'
+                }`}
+              >
+                {/* Monogram avatar (legacy user-set emoji still honoured) */}
+                <span
+                  className={`flex-shrink-0 mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                    isActive
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'bg-[var(--fill-strong)] text-[var(--ink-2)] border border-[var(--line)]'
+                  }`}
+                >
+                  {p.emoji || p.name.trim().charAt(0).toUpperCase()}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-[var(--ink)] truncate">{p.name}</p>
+                    {isActive && (
+                      <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white bg-[var(--accent)] rounded-full px-2 py-0.5">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--ink-3)] mt-1 line-clamp-2">{p.prompt}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 mt-0.5">
+                  <button
+                    onClick={() => setActive(isActive ? null : p)}
+                    className={`text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'text-[var(--ink-3)] hover:text-[var(--ink)]'
+                        : 'text-[var(--accent-fg)] hover:opacity-80'
+                    }`}
+                  >
+                    {isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(p.id)}
+                    className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* New persona */}
+      <div className="pt-5 border-t border-[var(--line)]">
+        <p className="text-xs font-semibold text-[var(--ink)] mb-3">New persona</p>
+        <div className="mb-3">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Persona name (e.g. Debate Partner)"
+            maxLength={40}
+            className={inputCls}
+          />
+        </div>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={4}
+          maxLength={2000}
+          placeholder="System prompt — who is this persona, and how should it reply?"
+          className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors resize-none"
+        />
+        <div className="flex justify-end mt-2">
+          <button onClick={create} disabled={!name.trim() || !prompt.trim()} className={btnCls}>
+            Create
+          </button>
+        </div>
+      </div>
+
+      {deleteId !== null && (
+        <ConfirmModal
+          title="Delete persona"
+          message="This persona will be removed. If it's active, chat goes back to the default personality."
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            remove(deleteId);
+            setDeleteId(null);
+          }}
+          onClose={() => setDeleteId(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Memory ──────────────────────────────────────────────────────────────────
+
+/** Durable facts Close AI has learned about the user, with per-fact delete. */
+function MemoryPanel() {
+  const [facts, setFacts] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmWipe, setConfirmWipe] = useState(false);
+
+  useEffect(() => {
+    getMemoryFacts()
+      .then(setFacts)
+      .catch(() => toast.error('Could not load memory.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const removeFact = (index: number) => {
+    deleteMemoryFact(index)
+      .then((next) => {
+        setFacts(next);
+        toast.success('Fact forgotten');
+      })
+      .catch(() => toast.error('Could not delete that fact.'));
+  };
+
+  const wipe = () => {
+    clearMemory()
+      .then(() => {
+        setFacts([]);
+        toast.success('Memory cleared');
+      })
+      .catch(() => toast.error('Could not clear memory.'));
+  };
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Memory</h3>
+        <p className={subCls}>
+          Close AI remembers durable facts about you from conversations and uses them in every
+          chat.
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : facts.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">
+          Nothing remembered yet — it learns as you chat.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {facts.map((fact, i) => (
+            <div
+              key={`${i}-${fact}`}
+              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-[var(--fill)]"
+            >
+              <p className="flex-1 min-w-0 text-sm text-[var(--ink-2)] break-words">{fact}</p>
+              <button
+                onClick={() => removeFact(i)}
+                aria-label="Forget this fact"
+                title="Forget this fact"
+                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:text-red-400 hover:bg-[var(--fill-strong)] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && facts.length > 0 && (
+        <div className="mt-8 pt-5 border-t border-[var(--line)]">
+          <button
+            onClick={() => setConfirmWipe(true)}
+            className="text-sm font-medium text-red-400 hover:text-red-300 transition-colors"
+          >
+            Clear all memory
+          </button>
+          <p className="text-xs text-[var(--ink-4)] mt-1">
+            Forgets everything learned so far. This can&apos;t be undone.
+          </p>
+        </div>
+      )}
+
+      {confirmWipe && (
+        <ConfirmModal
+          title="Clear all memory"
+          message="Close AI will forget every remembered fact about you. This can't be undone."
+          confirmLabel="Clear memory"
+          danger
+          onConfirm={() => {
+            wipe();
+            setConfirmWipe(false);
+          }}
+          onClose={() => setConfirmWipe(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Insights ────────────────────────────────────────────────────────────────
+
+type InsightsData = {
+  totalChats: number;
+  totalMessages: number;
+  totalWords: number;
+  estTokens: number;
+  mostActiveDay: string;
+  avgPerChat: number;
+  topics: { word: string; count: number }[];
+};
+
+const TOPIC_STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'for', 'to', 'with',
+  'how', 'what', 'why', 'is', 'are', 'new', 'chat',
+]);
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** 12400 → "12.4k", 1000 → "1k", 950 → "950". */
+function fmtCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return String(n);
+}
+
+function computeInsights(sessions: ChatSession[]): InsightsData {
+  let totalMessages = 0;
+  let totalWords = 0;
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  const topicCounts = new Map<string, number>();
+
+  for (const s of sessions) {
+    totalMessages += s.messages.length;
+    for (const m of s.messages) {
+      if (m.content) totalWords += m.content.trim().split(/\s+/).filter(Boolean).length;
+      if (m.timestamp) dayCounts[new Date(m.timestamp).getDay()] += 1;
+    }
+    for (const raw of (s.title || '').toLowerCase().split(/\s+/)) {
+      // Strip punctuation but keep non-ASCII letters (e.g. Tamil titles).
+      const word = raw.replace(/[^a-z0-9\u0080-\uffff]+/g, '');
+      if (word.length < 3 || TOPIC_STOPWORDS.has(word)) continue;
+      topicCounts.set(word, (topicCounts.get(word) ?? 0) + 1);
+    }
+  }
+
+  const maxDay = Math.max(...dayCounts);
+  const topics = Array.from(topicCounts.entries())
+    .map(([word, count]) => ({ word, count }))
+    .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word))
+    .slice(0, 8);
+
+  return {
+    totalChats: sessions.length,
+    totalMessages,
+    totalWords,
+    estTokens: Math.round(totalWords * 1.3),
+    mostActiveDay: maxDay > 0 ? WEEKDAYS[dayCounts.indexOf(maxDay)] : '—',
+    avgPerChat: sessions.length ? Math.round((totalMessages / sessions.length) * 10) / 10 : 0,
+    topics,
+  };
+}
+
+/** Client-side usage stats computed from the user's chat history. */
+function InsightsPanel() {
+  const [data, setData] = useState<InsightsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getChats()
+      .then((sessions) => setData(computeInsights(sessions)))
+      .catch(() => toast.error('Could not load your chats.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const maxTopic = data && data.topics.length > 0 ? data.topics[0].count : 1;
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Insights</h3>
+        <p className={subCls}>A snapshot of how you use Close AI — computed on your device.</p>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : !data || data.totalChats === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">
+          No conversations yet — your stats will appear once you start chatting.
+        </p>
+      ) : (
+        <>
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {(
+              [
+                ['Total chats', fmtCount(data.totalChats)],
+                ['Total messages', fmtCount(data.totalMessages)],
+                ['Words exchanged', fmtCount(data.totalWords)],
+                ['Est. tokens', fmtCount(data.estTokens)],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-xl border border-[var(--line)] bg-[var(--fill)] p-4"
+              >
+                <p className="text-xl font-semibold text-[var(--ink)]">{value}</p>
+                <p className="text-[11px] text-[var(--ink-3)] mt-1">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <Row title="Most active day" desc="Weekday when you send the most messages.">
+            <span className="text-sm text-[var(--ink-2)] font-medium">{data.mostActiveDay}</span>
+          </Row>
+          <Row title="Average messages per chat" desc="Across your whole history.">
+            <span className="text-sm text-[var(--ink-2)] font-medium">{data.avgPerChat}</span>
+          </Row>
+
+          {/* Top topics */}
+          {data.topics.length > 0 && (
+            <div className="pt-4">
+              <p className="text-sm font-medium text-[var(--ink)]">Top topics</p>
+              <p className="text-xs text-[var(--ink-3)] mt-0.5 mb-3">
+                Most frequent words from your chat titles.
+              </p>
+              <div className="space-y-2">
+                {data.topics.map((t) => (
+                  <div key={t.word} className="flex items-center gap-3">
+                    <span className="w-24 flex-shrink-0 text-xs text-[var(--ink-2)] truncate text-right">
+                      {t.word}
+                    </span>
+                    <div className="flex-1 h-4 rounded-md bg-[var(--fill)] overflow-hidden">
+                      <div
+                        className="h-full rounded-md bg-[var(--accent)]/60"
+                        style={{ width: `${Math.max((t.count / maxTopic) * 100, 4)}%` }}
+                      />
+                    </div>
+                    <span className="w-6 flex-shrink-0 text-[11px] text-[var(--ink-4)] tabular-nums">
+                      {t.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 const navIcon = (key: Tab) => {
   const cls = 'w-4 h-4';
   if (key === 'account')
@@ -87,6 +767,22 @@ const navIcon = (key: Tab) => {
   if (key === 'data')
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path strokeLinecap="round" d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6" /></svg>
+    );
+  if (key === 'api')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4-2a6 6 0 01-7.74 5.74L9 17H7v2H5v2H2v-3l6.26-6.26A6 6 0 1121 7z" /></svg>
+    );
+  if (key === 'personas')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0zM6.7 18.6a6 6 0 0110.6 0" /></svg>
+    );
+  if (key === 'memory')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 5a2 2 0 012-2h8a2 2 0 012 2v16l-6-4-6 4V5z" /></svg>
+    );
+  if (key === 'insights')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 20v-6M12 20V4M19 20v-10" /></svg>
     );
   if (key === 'about')
     return (
@@ -342,6 +1038,10 @@ export function SettingsModal({
     { key: 'appearance', label: 'Appearance' },
     { key: 'chat', label: 'Chat' },
     { key: 'data', label: 'Data' },
+    { key: 'api', label: 'API Keys' },
+    { key: 'personas', label: 'Personas' },
+    { key: 'memory', label: 'Memory' },
+    { key: 'insights', label: 'Insights' },
     { key: 'security', label: 'Security' },
     { key: 'about', label: 'About' },
   ];
@@ -349,7 +1049,7 @@ export function SettingsModal({
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-4xl h-[640px] max-h-[92vh] flex flex-col rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl overflow-hidden">
+      <div className="animate-modal-in relative w-full max-w-4xl h-[640px] max-h-[92vh] flex flex-col rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--line)]">
           <h2 className="text-xl font-display font-medium text-[var(--ink)] tracking-tight">Settings</h2>
@@ -544,7 +1244,7 @@ export function SettingsModal({
                   </div>
                 </div>
                 {voices.length > 0 && (
-                  <Row title="Read-aloud voice" desc="Voice used for the read-aloud (🔊) button.">
+                  <Row title="Read-aloud voice" desc="Voice used by the read-aloud button on replies.">
                     <div className="flex items-center gap-2">
                       <select
                         value={voice}
@@ -686,6 +1386,14 @@ export function SettingsModal({
                 </div>
               </>
             )}
+
+            {tab === 'api' && <ApiKeysPanel />}
+
+            {tab === 'personas' && <PersonasPanel />}
+
+            {tab === 'memory' && <MemoryPanel />}
+
+            {tab === 'insights' && <InsightsPanel />}
 
             {tab === 'security' && (
               <>

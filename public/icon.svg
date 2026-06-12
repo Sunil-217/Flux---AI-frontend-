@@ -1,36 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f87171"/>
-      <stop offset="1" stop-color="#dc2626"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
-  <g transform="translate(256,256) scale(2.0)">
-    <path
-      d="
-        M -68,-66
-        L 60,-66
-        Q 80,-66 80,-46
-        L 80,18
-        Q 80,38 60,38
-        L -10,38
-        L -38,66
-        L -38,38
-        L -68,38
-        Q -88,38 -88,18
-        L -88,-46
-        Q -88,-66 -68,-66
-        Z
-      "
-      fill="#ffffff"
-    />
-    <g transform="translate(10 -16)">
-      <path
-        d="M 0,-30 Q 6,-6 30,0 Q 6,6 0,30 Q -6,6 -30,0 Q -6,-6 0,-30 Z"
-        fill="#dc2626"
-      />
-      <circle cx="0" cy="0" r="5" fill="#ffffff"/>
-    </g>
-  </g>
+  <!-- Close AI — "The Aperture": one solid mass, a C carved out in negative
+       space (rounded bite from the right edge). Flat color, no gradients;
+       survives 16px and monochrome. -->
+  <mask id="aperture">
+    <rect width="512" height="512" rx="133" fill="#fff"/>
+    <circle cx="287" cy="256" r="118" fill="#000"/>
+    <rect x="287" y="210" width="225" height="92" rx="46" fill="#000"/>
+  </mask>
+  <rect width="512" height="512" rx="133" fill="#DC2626" mask="url(#aperture)"/>
 </svg>

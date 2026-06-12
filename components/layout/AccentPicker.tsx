@@ -36,11 +36,22 @@ export const ACCENTS: Record<string, Accent> = {
 };
 export const ACCENT_KEY = 'close_ai_accent';
 
+// The boot script in app/layout.tsx re-applies these vars BEFORE paint on every
+// load, so the picked accent works even if this component never mounts.
+export const ACCENT_VARS_KEY = 'close_ai_accent_vars';
+
 export function applyAccent(name: string) {
   const a = ACCENTS[name];
   if (!a || typeof document === 'undefined') return;
   const root = document.documentElement;
-  Object.entries(a.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  // 'important' priority so the picked accent wins over the theme defaults in
+  // :root/.dark/.light no matter the cascade.
+  Object.entries(a.vars).forEach(([k, v]) => root.style.setProperty(k, v, 'important'));
+  try {
+    localStorage.setItem(ACCENT_VARS_KEY, JSON.stringify(a.vars));
+  } catch {
+    /* ignore */
+  }
 }
 
 // Read-aloud voice preference (stores the chosen SpeechSynthesis voice name).
