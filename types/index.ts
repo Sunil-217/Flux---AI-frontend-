@@ -79,4 +79,5 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
+  is_admin?: boolean; // platform admin — can open the /admin control panel
 }

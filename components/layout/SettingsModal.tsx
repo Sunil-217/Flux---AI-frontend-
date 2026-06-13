@@ -39,6 +39,8 @@ import {
   applyCodeFont,
 } from '@/components/layout/AccentPicker';
 import { ttsSpeak } from '@/services/api';
+import { useFeatures } from '@/components/providers/FeatureProvider';
+import type { FeatureKey } from '@/lib/features';
 
 type Tab =
   | 'account'
@@ -803,6 +805,7 @@ export function SettingsModal({
   onClearChats: () => void;
 }) {
   const { user, updateUser } = useAuth();
+  const { enabled } = useFeatures();
   const [tab, setTab] = useState<Tab>('account');
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
@@ -847,6 +850,27 @@ export function SettingsModal({
   const t = useT();
   const [lang, setLangState] = useState<Lang>('en');
   useEffect(() => setLangState(getLang()), []);
+
+  // If the open tab maps to a feature an admin just disabled, fall back to Account.
+  useEffect(() => {
+    const map: Partial<Record<Tab, FeatureKey>> = {
+      api: 'api_keys',
+      personas: 'personas',
+      memory: 'memory',
+      insights: 'insights',
+    };
+    if (
+      tab === 'chat' &&
+      !enabled('response_style') &&
+      !enabled('custom_instructions') &&
+      !enabled('notifications')
+    ) {
+      setTab('account');
+      return;
+    }
+    const f = map[tab];
+    if (f && !enabled(f)) setTab('account');
+  }, [tab, enabled]);
   const pickLang = (l: Lang) => {
     setLang(l);
     setLangState(l);
@@ -1035,7 +1059,14 @@ export function SettingsModal({
 
   if (typeof document === 'undefined') return null;
 
-  const nav: { key: Tab; label: string }[] = [
+  // Tabs that are tied to an admin-toggleable feature; hidden when it's off.
+  const FEATURE_FOR_TAB: Partial<Record<Tab, FeatureKey>> = {
+    api: 'api_keys',
+    personas: 'personas',
+    memory: 'memory',
+    insights: 'insights',
+  };
+  const allNav: { key: Tab; label: string }[] = [
     { key: 'account', label: 'Account' },
     { key: 'appearance', label: 'Appearance' },
     { key: 'chat', label: 'Chat' },
@@ -1047,6 +1078,14 @@ export function SettingsModal({
     { key: 'security', label: 'Security' },
     { key: 'about', label: 'About' },
   ];
+  // The Chat tab holds three toggleable features — hide it only if all are off.
+  const chatHasAny =
+    enabled('response_style') || enabled('custom_instructions') || enabled('notifications');
+  const nav = allNav.filter((n) => {
+    if (n.key === 'chat') return chatHasAny;
+    const f = FEATURE_FOR_TAB[n.key];
+    return !f || enabled(f);
+  });
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1245,28 +1284,30 @@ export function SettingsModal({
                     ))}
                   </div>
                 </div>
-                <Row title="Read-aloud voice" desc="Neural voice used by the read-aloud (speaker) button on replies.">
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={voice}
-                      onChange={(e) => pickVoice(e.target.value)}
-                      className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] max-w-[180px]"
-                    >
-                      {TTS_VOICES.map((v) => (
-                        <option key={v.key} value={v.key}>
-                          {v.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={testVoice}
-                      disabled={testingVoice}
-                      className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
-                    >
-                      {testingVoice ? '…' : 'Test'}
-                    </button>
-                  </div>
-                </Row>
+                {enabled('read_aloud') && (
+                  <Row title="Read-aloud voice" desc="Neural voice used by the read-aloud (speaker) button on replies.">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={voice}
+                        onChange={(e) => pickVoice(e.target.value)}
+                        className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] max-w-[180px]"
+                      >
+                        {TTS_VOICES.map((v) => (
+                          <option key={v.key} value={v.key}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={testVoice}
+                        disabled={testingVoice}
+                        className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                      >
+                        {testingVoice ? '…' : 'Test'}
+                      </button>
+                    </div>
+                  </Row>
+                )}
               </>
             )}
 
@@ -1276,6 +1317,7 @@ export function SettingsModal({
                   <h3 className={headingCls}>Chat</h3>
                   <p className={subCls}>Tune how Close AI responds to you.</p>
                 </div>
+                {enabled('response_style') && (
                 <Row title="Response style" desc="Sets the tone and length of answers.">
                   <div className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
                     {(['default', 'concise', 'explanatory', 'formal'] as const).map((s) => (
@@ -1293,6 +1335,8 @@ export function SettingsModal({
                     ))}
                   </div>
                 </Row>
+                )}
+                {enabled('custom_instructions') && (
                 <div className="py-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <p className="text-sm font-medium text-[var(--ink)]">Custom instructions</p>
@@ -1318,6 +1362,8 @@ export function SettingsModal({
                     </button>
                   </div>
                 </div>
+                )}
+                {enabled('notifications') && (
                 <Row
                   title="Notify when a long reply finishes"
                   desc="Browser notification when a streamed answer completes (works when the tab is in the background)."
@@ -1336,6 +1382,7 @@ export function SettingsModal({
                     />
                   </button>
                 </Row>
+                )}
               </>
             )}
 
@@ -1345,11 +1392,13 @@ export function SettingsModal({
                   <h3 className={headingCls}>Data</h3>
                   <p className={subCls}>Export or wipe what Close AI has stored for your account.</p>
                 </div>
+                {enabled('data_export') && (
                 <Row title="Export all conversations" desc="Download a JSON archive of every chat you have.">
                   <button onClick={exportAllChats} className={btnCls}>
                     Export
                   </button>
                 </Row>
+                )}
                 <Row
                   title="Browser storage"
                   desc="Settings, prompts, folders, and per-chat preferences are stored locally."

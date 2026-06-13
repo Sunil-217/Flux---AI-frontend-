@@ -34,6 +34,7 @@ import { useCodeSessions } from '@/hooks/useCodeSessions';
 import { useChat } from '@/hooks/useChat';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useFeatures } from '@/components/providers/FeatureProvider';
 import {
   deleteChat,
   generateTitle,
@@ -88,7 +89,9 @@ export function AppLayout() {
   // Code mode is a desktop-only surface (CodeMirror editor, folder access — not
   // usable on a phone). On mobile we always render Chat regardless of `mode`.
   const isMobile = useIsMobile();
-  const effectiveMode = isMobile ? 'chat' : mode;
+  const { enabled } = useFeatures();
+  // Code mode is desktop-only AND can be switched off platform-wide by an admin.
+  const effectiveMode = isMobile || !enabled('code_mode') ? 'chat' : mode;
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
@@ -320,6 +323,10 @@ export function AppLayout() {
     async (question: string, displayLabel?: string) => {
       const sid = activeSessionId;
       if (!sid) return;
+      if (!enabled('research')) {
+        toast.error('Deep research has been turned off.');
+        return;
+      }
       const q = question.trim();
       if (!q) {
         toast.error('Type a question after /research');
@@ -359,7 +366,7 @@ export function AppLayout() {
         });
       }
     },
-    [activeSessionId, addMessage, patchMessage]
+    [activeSessionId, addMessage, patchMessage, enabled]
   );
 
   // Quiz: /quiz [topic or count] (or NL "quiz podu" / "make a quiz").
@@ -368,6 +375,10 @@ export function AppLayout() {
     async (arg?: string, displayLabel?: string) => {
       const sid = activeSessionId;
       if (!sid) return;
+      if (!enabled('quiz')) {
+        toast.error('Quiz generation has been turned off.');
+        return;
+      }
       const trimmed = (arg ?? '').trim();
       // A bare number ("/quiz 10") sets the question count; anything else is a topic.
       const isCount = /^\d{1,2}$/.test(trimmed);
@@ -413,7 +424,7 @@ export function AppLayout() {
         });
       }
     },
-    [activeSessionId, activeSession, addMessage, patchMessage, lastAssistantContent]
+    [activeSessionId, activeSession, addMessage, patchMessage, lastAssistantContent, enabled]
   );
 
   // Generate-slash-command handler: /image, /video, /pdf. Each adds a user
@@ -430,6 +441,21 @@ export function AppLayout() {
     ) => {
       const sid = activeSessionId;
       if (!sid || !prompt.trim()) return;
+
+      // Respect admin feature flags — a disabled generator never runs, even if
+      // the user typed the slash command or triggered it by natural language.
+      const FEATURE_FOR_KIND: Record<string, 'image_gen' | 'pdf_gen' | 'office_gen'> = {
+        image: 'image_gen',
+        pdf: 'pdf_gen',
+        excel: 'office_gen',
+        word: 'office_gen',
+        ppt: 'office_gen',
+      };
+      const feat = FEATURE_FOR_KIND[kind];
+      if (feat && !enabled(feat)) {
+        toast.error('This feature has been turned off.');
+        return;
+      }
 
       // 1. User bubble — natural request when given, else the slash form.
       addMessage(sid, {
@@ -508,7 +534,7 @@ export function AppLayout() {
         });
       }
     },
-    [activeSessionId, addMessage, patchMessage]
+    [activeSessionId, addMessage, patchMessage, enabled]
   );
 
   const handleSendMessage = useCallback(

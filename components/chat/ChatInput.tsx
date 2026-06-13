@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent } from 'react';
 import toast from 'react-hot-toast';
 import { useT } from '@/lib/i18n';
+import { useFeatures } from '@/components/providers/FeatureProvider';
+import type { FeatureKey } from '@/lib/features';
 
 interface Props {
   onSend: (content: string, image?: string) => void;
@@ -131,6 +133,19 @@ const SLASH_COMMANDS = [
 // generation endpoints, so the raw `/excel foo` text must reach handleSendMessage.
 const PASSTHROUGH_SLASH = new Set(['image', 'video', 'pdf', 'excel', 'word', 'ppt', 'research', 'quiz']);
 
+// Which feature flag gates each slash command (commands not listed are always
+// available — summarize / explain / code / improve are core).
+const CMD_FEATURE: Record<string, FeatureKey> = {
+  image: 'image_gen',
+  pdf: 'pdf_gen',
+  excel: 'office_gen',
+  word: 'office_gen',
+  ppt: 'office_gen',
+  research: 'research',
+  quiz: 'quiz',
+  translate: 'translation',
+};
+
 function expandSlash(text: string): string {
   const m = text.match(/^\/([a-zA-Z]+)\s*([\s\S]*)$/);
   if (!m) return text;
@@ -162,6 +177,7 @@ function expandSlash(text: string): string {
 
 export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, injectText, onUploadFiles, onUploadVideo, onAddUrl }: Props) {
   const t = useT();
+  const { enabled } = useFeatures();
   const [value, setValue] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -216,7 +232,20 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
   const canSend = !disabled && (value.trim().length > 0 || !!image);
 
   const slashQuery = value.startsWith('/') && !value.includes(' ') ? value.slice(1).toLowerCase() : null;
-  const slashMenu = slashQuery !== null ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashQuery)) : [];
+  const slashMenu =
+    slashQuery !== null
+      ? SLASH_COMMANDS.filter(
+          (c) =>
+            c.cmd.startsWith(slashQuery) &&
+            (!CMD_FEATURE[c.cmd] || enabled(CMD_FEATURE[c.cmd]))
+        )
+      : [];
+
+  // Which attach options are available depends on the admin's feature flags.
+  const canUploadFiles = enabled('file_upload');
+  const canUploadMedia = enabled('media_upload');
+  const canAddUrl = enabled('url_ingest') && !!onAddUrl;
+  const showAttach = canUploadFiles || canUploadMedia || canAddUrl;
 
   const autoResize = () => {
     const el = textareaRef.current;
@@ -246,10 +275,12 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
   const onPickFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files);
+    // Images attach for vision Q&A (always allowed). Video/audio and documents
+    // are each gated by their feature flag — skip them if an admin disabled it.
     arr.filter(isImageFile).forEach(handleImageFile);
-    arr.filter((f) => !isImageFile(f) && isVideoFile(f)).forEach((v) => onUploadVideo?.(v));
+    if (canUploadMedia) arr.filter((f) => !isImageFile(f) && isVideoFile(f)).forEach((v) => onUploadVideo?.(v));
     const docs = arr.filter((f) => !isImageFile(f) && !isVideoFile(f));
-    if (docs.length) onUploadFiles?.(docs);
+    if (docs.length && canUploadFiles) onUploadFiles?.(docs);
   };
 
   // "Add folder": ingest every supported file inside the chosen folder.
@@ -413,7 +444,9 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
           }}
         />
 
-        {/* Attach: files / photos / folder (Claude-style menu) */}
+        {/* Attach: files / photos / folder (Claude-style menu). The whole control
+            is hidden when an admin has disabled every upload/link feature. */}
+        {showAttach && (
         <div ref={attachMenuRef} className="relative flex-shrink-0">
           <button
             onClick={() => !disabled && setAttachOpen((o) => !o)}
@@ -428,40 +461,44 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
           </button>
           {attachOpen && (
             <div className="absolute bottom-full mb-2 left-0 w-56 rounded-xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-xl py-1 z-20">
-              <button
-                onClick={() => {
-                  // Open the picker FIRST (inside the user gesture), then close
-                  // the menu — so the file dialog reliably appears.
-                  fileRef.current?.click();
-                  setAttachOpen(false);
-                }}
-                className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
-              >
-                <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <rect x="3" y="3" width="18" height="18" rx="2.5" />
-                  <circle cx="8.5" cy="8.5" r="1.6" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-4.5-4.5L5 21.5" />
-                </svg>
-                <span className="flex-1">Add files, photos, or video</span>
-                <span className="text-[10px] text-[var(--ink-4)]">Ctrl+U</span>
-              </button>
-              <button
-                onClick={() => {
-                  setAttachOpen(false);
-                  folderRef.current?.click();
-                }}
-                className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
-              >
-                <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                </svg>
-                <span>Add folder</span>
-              </button>
-              {onAddUrl && (
+              {(canUploadFiles || canUploadMedia) && (
+                <button
+                  onClick={() => {
+                    // Open the picker FIRST (inside the user gesture), then close
+                    // the menu — so the file dialog reliably appears.
+                    fileRef.current?.click();
+                    setAttachOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="2.5" />
+                    <circle cx="8.5" cy="8.5" r="1.6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-4.5-4.5L5 21.5" />
+                  </svg>
+                  <span className="flex-1">{canUploadMedia ? 'Add files, photos, or video' : 'Add files or photos'}</span>
+                  <span className="text-[10px] text-[var(--ink-4)]">Ctrl+U</span>
+                </button>
+              )}
+              {canUploadFiles && (
                 <button
                   onClick={() => {
                     setAttachOpen(false);
-                    onAddUrl();
+                    folderRef.current?.click();
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                  </svg>
+                  <span>Add folder</span>
+                </button>
+              )}
+              {canAddUrl && (
+                <button
+                  onClick={() => {
+                    setAttachOpen(false);
+                    onAddUrl?.();
                   }}
                   className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
                 >
@@ -474,6 +511,7 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
             </div>
           )}
         </div>
+        )}
 
         <textarea
           ref={textareaRef}
@@ -495,7 +533,7 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
           style={{ maxHeight: '200px' }}
         />
 
-        {micSupported && (
+        {micSupported && enabled('voice_input') && (
           <button
             onClick={toggleMic}
             disabled={disabled}

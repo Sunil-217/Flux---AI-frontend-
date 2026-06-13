@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import type { Source, ChatSession, User } from '@/types';
+import { featureEnabledCached } from '@/lib/features';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
 const TOKEN_KEY = 'close_ai_token';
@@ -400,16 +401,24 @@ function responseStylePrefs(): {
   if (typeof window === 'undefined') return {};
   try {
     const out: { style?: string; custom_instructions?: string; web_search?: boolean } = {};
-    const style = localStorage.getItem(STYLE_KEY) || '';
-    const ci = (localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY) || '').trim();
+    // Each preference is sent only if its feature is enabled platform-wide.
+    const style = featureEnabledCached('response_style') ? localStorage.getItem(STYLE_KEY) || '' : '';
+    const ci = featureEnabledCached('custom_instructions')
+      ? (localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY) || '').trim()
+      : '';
     const folder = (localStorage.getItem(FOLDER_INSTRUCTIONS_KEY) || '').trim();
-    const persona = (localStorage.getItem(PERSONA_PROMPT_KEY) || '').trim();
+    const persona = featureEnabledCached('personas')
+      ? (localStorage.getItem(PERSONA_PROMPT_KEY) || '').trim()
+      : '';
     // Persona first (it defines the assistant), then folder (project) context,
     // then the user's global instructions.
     const combined = [persona, folder, ci].filter(Boolean).join('\n\n');
     if (style && style !== 'default') out.style = style;
     if (combined) out.custom_instructions = combined;
-    if (localStorage.getItem(WEB_SEARCH_KEY) === 'off') out.web_search = false;
+    // Off if the user disabled it OR an admin disabled the feature platform-wide.
+    if (localStorage.getItem(WEB_SEARCH_KEY) === 'off' || !featureEnabledCached('web_search')) {
+      out.web_search = false;
+    }
     return out;
   } catch {
     return {};
@@ -583,4 +592,116 @@ export async function generateWord(prompt: string): Promise<GeneratedFile> {
 /** Generate a PowerPoint presentation (.pptx). Returns the file bytes + server filename. */
 export async function generatePpt(prompt: string): Promise<GeneratedFile> {
   return postForFile('/generate/ppt', prompt, 'presentation.pptx');
+}
+
+// ── Admin control panel (/admin/* — platform-admin only) ──
+export interface AdminStats {
+  users: {
+    total: number;
+    verified: number;
+    unverified: number;
+    admins: number;
+    banned: number;
+    new_7d: number;
+    new_30d: number;
+  };
+  content: {
+    chats: number;
+    api_keys: number;
+    active_api_keys: number;
+    api_calls: number;
+    shared_chats: number;
+    memory_users: number;
+  };
+  recent_signups: {
+    id: number;
+    name: string;
+    email: string;
+    is_verified: boolean;
+    created_at: string | null;
+  }[];
+}
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string | null;
+  is_verified: boolean;
+  is_admin: boolean;
+  is_banned: boolean;
+  is_protected: boolean; // bootstrapped superadmin — can't be demoted/banned/deleted
+  created_at: string | null;
+  chat_count: number;
+  api_key_count: number;
+}
+
+export interface AdminUserPatch {
+  is_verified?: boolean;
+  is_admin?: boolean;
+  is_banned?: boolean;
+}
+
+export interface AdminAuditEntry {
+  id: number;
+  actor_email: string;
+  action: string;
+  target_email: string | null;
+  detail: string | null;
+  created_at: string | null;
+}
+
+export async function adminStats(): Promise<AdminStats> {
+  const res = await client.get<AdminStats>('/admin/stats');
+  return res.data;
+}
+
+export async function adminListUsers(
+  q = '',
+  limit = 50,
+  offset = 0
+): Promise<{ total: number; users: AdminUser[] }> {
+  const res = await client.get<{ total: number; users: AdminUser[] }>('/admin/users', {
+    params: { q, limit, offset },
+  });
+  return res.data;
+}
+
+export async function adminUpdateUser(id: number, patch: AdminUserPatch): Promise<AdminUser> {
+  const res = await client.patch<AdminUser>(`/admin/users/${id}`, patch);
+  return res.data;
+}
+
+export async function adminDeleteUser(id: number): Promise<void> {
+  await client.delete(`/admin/users/${id}`);
+}
+
+export async function adminAuditLog(limit = 50): Promise<AdminAuditEntry[]> {
+  const res = await client.get<{ entries: AdminAuditEntry[] }>('/admin/audit', {
+    params: { limit },
+  });
+  return res.data.entries ?? [];
+}
+
+// ── Feature flags ──
+export type FeatureMap = Record<string, boolean>;
+
+/** Public — the effective platform feature flags (what's enabled for users). */
+export async function getFeatures(): Promise<FeatureMap> {
+  const res = await client.get<{ features: FeatureMap }>('/features');
+  return res.data.features ?? {};
+}
+
+/** Admin — read the full flag map. */
+export async function adminGetFeatures(): Promise<FeatureMap> {
+  const res = await client.get<{ features: FeatureMap }>('/admin/features');
+  return res.data.features ?? {};
+}
+
+/** Admin — toggle one or more flags; returns the new effective map. */
+export async function adminSetFeatures(updates: FeatureMap): Promise<FeatureMap> {
+  const res = await client.patch<{ features: FeatureMap }>('/admin/features', {
+    features: updates,
+  });
+  return res.data.features ?? {};
 }

@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getMemoryFacts, deleteMemoryFact } from '@/services/api';
+import { useFeatures } from '@/components/providers/FeatureProvider';
 import type { ChatSession } from '@/types';
 
 interface Persona {
@@ -71,6 +72,7 @@ export function ContextRail({
   onResearch: () => void;
   onQuiz: () => void;
 }) {
+  const { enabled } = useFeatures();
   const [open, setOpen] = useState(true);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -237,8 +239,8 @@ export function ContextRail({
               )}
             </p>
             <span className="flex gap-2.5 flex-shrink-0 pl-2">
-              <button onClick={onResearch} className={verb}>Research</button>
-              <button onClick={onQuiz} className={verb}>Quiz</button>
+              {enabled('research') && <button onClick={onResearch} className={verb}>Research</button>}
+              {enabled('quiz') && <button onClick={onQuiz} className={verb}>Quiz</button>}
             </span>
           </div>
         </section>
@@ -250,7 +252,7 @@ export function ContextRail({
               Knowledge
               {sources.list.length > 0 && <span className="text-[var(--ink-3)]">{sources.list.length}</span>}
             </p>
-            <button onClick={onAddUrl} className={verb}>+ Add</button>
+            {enabled('url_ingest') && <button onClick={onAddUrl} className={verb}>+ Add</button>}
           </div>
           {sources.list.length === 0 ? (
             <p className={`${statLine} mt-1.5 text-[var(--ink-4)]`}>
@@ -312,6 +314,7 @@ export function ContextRail({
 
         {/* ── Persona ── (custom dropdown — native <select> option lists can't
              be dark-themed and render as an OS-default white box) */}
+        {enabled('personas') && (
         <section className="py-3.5">
           <p className={heading}>Persona</p>
           <div className="relative mt-1.5">
@@ -371,6 +374,7 @@ export function ContextRail({
               : 'Neutral behavior — answers calibrated to each question.'}
           </p>
         </section>
+        )}
       </div>
     </aside>
   );

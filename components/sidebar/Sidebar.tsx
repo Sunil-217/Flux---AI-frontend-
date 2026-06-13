@@ -5,7 +5,9 @@ import { NewChatButton } from './NewChatButton';
 import { ChatListItem } from './ChatListItem';
 import { Logo } from '@/components/layout/Logo';
 import { SettingsModal } from '@/components/layout/SettingsModal';
+import { AdminPanel } from '@/components/layout/AdminPanel';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useFeatures } from '@/components/providers/FeatureProvider';
 import type { ChatSession, Folder, CodeSession } from '@/types';
 
 interface Props {
@@ -98,10 +100,12 @@ export function Sidebar({
   onOpenLibrary,
 }: Props) {
   const { user, logout } = useAuth();
+  const { enabled } = useFeatures();
   const t = useT();
   const isCode = mode === 'code';
   const [query, setQuery] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [promptCfg, setPromptCfg] = useState<{
     title: string;
@@ -503,8 +507,9 @@ export function Sidebar({
       )}
 
       {/* Mode switcher — Chat / Code (Claude-style), just above the profile.
-          Code mode is a desktop-only surface, so this is hidden on phones. */}
-      <div className="hidden md:block px-3 pt-2">
+          Code mode is a desktop-only surface (hidden on phones) and can be
+          switched off platform-wide by an admin. */}
+      <div className={`${enabled('code_mode') ? 'hidden md:block' : 'hidden'} px-3 pt-2`}>
         <div className="flex w-full rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
           {([['chat', 'Chat'], ['code', 'Code']] as const).map(([m, label]) => (
             <button
@@ -530,6 +535,22 @@ export function Sidebar({
           ))}
         </div>
       </div>
+
+      {/* Admin Panel — only rendered for platform admins */}
+      {user?.is_admin && (
+        <div className="px-3 pt-2">
+          <button
+            onClick={() => setAdminOpen(true)}
+            className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium text-[var(--accent-fg)] border border-[var(--accent)]/30 bg-[var(--accent)]/5 hover:bg-[var(--accent)]/10 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 12l1.8 1.8L15 10" />
+            </svg>
+            Admin Panel
+          </button>
+        </div>
+      )}
 
       {/* User + sign out */}
       <div className="border-t border-[var(--line)] p-3 mt-2">
@@ -568,6 +589,8 @@ export function Sidebar({
       {settingsOpen && (
         <SettingsModal onClose={() => setSettingsOpen(false)} onClearChats={onClearChats} />
       )}
+
+      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
 
       {promptCfg && (
         <PromptModal
