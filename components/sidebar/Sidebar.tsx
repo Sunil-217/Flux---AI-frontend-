@@ -502,8 +502,9 @@ export function Sidebar({
       </nav>
       )}
 
-      {/* Mode switcher — Chat / Code (Claude-style), just above the profile */}
-      <div className="px-3 pt-2">
+      {/* Mode switcher — Chat / Code (Claude-style), just above the profile.
+          Code mode is a desktop-only surface, so this is hidden on phones. */}
+      <div className="hidden md:block px-3 pt-2">
         <div className="flex w-full rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
           {([['chat', 'Chat'], ['code', 'Code']] as const).map(([m, label]) => (
             <button

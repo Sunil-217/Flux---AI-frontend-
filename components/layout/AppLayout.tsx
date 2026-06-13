@@ -33,6 +33,7 @@ import { useChatSessions } from '@/hooks/useChatSessions';
 import { useCodeSessions } from '@/hooks/useCodeSessions';
 import { useChat } from '@/hooks/useChat';
 import { useFileUpload } from '@/hooks/useFileUpload';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   deleteChat,
   generateTitle,
@@ -83,6 +84,10 @@ export function AppLayout() {
   const [promptLibOpen, setPromptLibOpen] = useState(false);
   const [addUrlOpen, setAddUrlOpen] = useState(false);
   const [mode, setMode] = useState<'chat' | 'code'>('chat');
+  // Code mode is a desktop-only surface (CodeMirror editor, folder access — not
+  // usable on a phone). On mobile we always render Chat regardless of `mode`.
+  const isMobile = useIsMobile();
+  const effectiveMode = isMobile ? 'chat' : mode;
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
@@ -809,14 +814,19 @@ export function AppLayout() {
       ),
       run: toggleTheme,
     },
-    {
-      id: 'code',
-      label: 'Code mode — open a folder',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
-      ),
-      run: () => setMode('code'),
-    },
+    // Code mode is desktop-only — omit it from the palette on phones.
+    ...(isMobile
+      ? []
+      : [
+          {
+            id: 'code',
+            label: 'Code mode — open a folder',
+            icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+            ),
+            run: () => setMode('code'),
+          },
+        ]),
     {
       id: 'prompts',
       label: 'Prompt library',
@@ -899,7 +909,7 @@ export function AppLayout() {
         onDeleteFolder={deleteFolder}
         onAssignFolder={assignFolder}
         onClearChats={clearAllSessions}
-        mode={mode}
+        mode={effectiveMode}
         onModeChange={setMode}
         codeSessions={codeSessions}
         activeCodeSessionId={activeCodeSessionId}
@@ -932,7 +942,7 @@ export function AppLayout() {
         />
       )}
 
-      {mode === 'code' ? (
+      {effectiveMode === 'code' ? (
         <CodeView
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           sessionId={activeCodeSessionId ?? 'none'}

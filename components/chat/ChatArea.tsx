@@ -76,6 +76,10 @@ export function ChatArea({
   const [summarizing, setSummarizing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  // Mobile-only overflow menu: secondary header actions (summarise / share /
+  // export) collapse into this so the title isn't crushed on a phone.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const [docOpen, setDocOpen] = useState(false);
   const docRef = useRef<HTMLDivElement>(null);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
@@ -134,6 +138,15 @@ export function ChatArea({
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [exportOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [moreOpen]);
 
   const toggleWeb = () =>
     setWebOn((prev) => {
@@ -350,7 +363,7 @@ export function ChatArea({
             onClick={doSummary}
             title="Summarise this conversation"
             aria-label="Summarise conversation"
-            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
+            className="flex-shrink-0 w-9 h-9 hidden md:flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
           >
             <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h7" />
@@ -380,7 +393,7 @@ export function ChatArea({
             onClick={doShare}
             title="Share a read-only link"
             aria-label="Share chat"
-            className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
+            className="flex-shrink-0 w-9 h-9 hidden md:flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
           >
             <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <circle cx="18" cy="5" r="3" />
@@ -392,7 +405,7 @@ export function ChatArea({
         )}
 
         {hasMessages && (
-          <div ref={exportRef} className="relative flex-shrink-0">
+          <div ref={exportRef} className="relative flex-shrink-0 hidden md:block">
             <button
               onClick={() => setExportOpen((o) => !o)}
               title="Export / download"
@@ -428,9 +441,83 @@ export function ChatArea({
           </div>
         )}
 
-        {hasMessages && <AccentPicker />}
+        {hasMessages && (
+          <span className="hidden md:inline-flex">
+            <AccentPicker />
+          </span>
+        )}
 
         <ThemeToggle />
+
+        {/* Mobile overflow — secondary actions live here so the phone header
+            stays uncluttered (summarise / share / export are desktop-inline). */}
+        {hasMessages && (
+          <div ref={moreRef} className="relative flex-shrink-0 md:hidden">
+            <button
+              onClick={() => setMoreOpen((o) => !o)}
+              title="More actions"
+              aria-label="More actions"
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="19" cy="12" r="1.6" />
+              </svg>
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 top-11 z-50 w-48 rounded-xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-xl py-1">
+                <button
+                  onClick={() => {
+                    doSummary();
+                    setMoreOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h7" />
+                  </svg>
+                  Summarise
+                </button>
+                <button
+                  onClick={() => {
+                    doShare();
+                    setMoreOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-3)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                  </svg>
+                  Share link
+                </button>
+                <button
+                  onClick={() => {
+                    exportChat();
+                    setMoreOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <span className="w-4 flex-shrink-0 text-center text-[var(--ink-4)] text-xs font-mono">md</span>
+                  Download Markdown
+                </button>
+                <button
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setTimeout(() => window.print(), 60);
+                  }}
+                  className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                >
+                  <span className="w-4 flex-shrink-0 text-center text-[var(--ink-4)] text-xs font-mono">pdf</span>
+                  Print / PDF
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="divider-glow absolute bottom-0 inset-x-0 h-px" />
       </header>
