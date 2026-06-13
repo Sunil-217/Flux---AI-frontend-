@@ -607,24 +607,18 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
       .replace(/```[\s\S]*?```/g, ' code block ')
       .replace(/[#*`_>~|]/g, '');
     if (!plain.trim()) return;
-    // If the user picked a specific device voice in Settings → Appearance, honor
-    // it directly. The neural backend TTS has its own fixed voice and would
-    // otherwise always win, making the voice selection appear to do nothing.
-    // No selection ⇒ use the higher-quality backend voice.
+    // Pass the user's chosen neural voice (Settings → Appearance) to the backend
+    // so changing it actually changes how replies sound. Empty ⇒ server default.
     let chosenVoice = '';
     try {
       chosenVoice = localStorage.getItem(VOICE_KEY) || '';
     } catch {
       /* ignore */
     }
-    if (chosenVoice) {
-      speakWithBrowser(plain);
-      return;
-    }
     const req = ++ttsReqRef.current;
     setTtsLoading(true);
     try {
-      const blob = await ttsSpeak(plain); // neural MP3 from the backend
+      const blob = await ttsSpeak(plain, chosenVoice || undefined); // neural MP3 from the backend
       if (req !== ttsReqRef.current) return; // user cancelled while loading
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -655,10 +649,16 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
     setTranslating(true);
     translateText(message.content, lang)
       .then((t) => {
+        // Backend returns '' when the translation call fails — surface that as a
+        // clear error instead of silently rendering nothing.
+        if (!t || !t.trim()) {
+          toast.error('Translation failed — please try again.');
+          return;
+        }
         setTranslated(t);
         setTLang(lang);
       })
-      .catch(() => toast.error('Translation failed.'))
+      .catch(() => toast.error('Translation failed — please try again.'))
       .finally(() => setTranslating(false));
   };
   const handleStartEdit = () => { setEditValue(message.content); setIsEditing(true); };

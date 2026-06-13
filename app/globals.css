@@ -103,6 +103,10 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
+  /* Stop the mobile rubber-band / pull-to-refresh bounce so the chat doesn't
+     feel like a scrollable web page. The app shell is position:fixed, so the
+     document itself has nothing to scroll. */
+  overscroll-behavior: none;
 }
 
 body {

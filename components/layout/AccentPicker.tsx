@@ -54,8 +54,28 @@ export function applyAccent(name: string) {
   }
 }
 
-// Read-aloud voice preference (stores the chosen SpeechSynthesis voice name).
+// Read-aloud voice preference. Stores an EDGE-TTS neural voice NAME — the
+// backend /tts endpoint speaks with it. (Earlier this stored a browser
+// SpeechSynthesis voice, which the backend ignored, so changing it did nothing.)
 export const VOICE_KEY = 'close_ai_voice';
+
+// Curated edge-tts neural voices the backend supports. Empty key = server
+// default (Aria, auto-switches to Tamil voice for Tamil-script text).
+export const TTS_VOICES: { key: string; label: string }[] = [
+  { key: '', label: 'Default · Aria (US female)' },
+  { key: 'en-US-JennyNeural', label: 'Jenny · US female' },
+  { key: 'en-US-GuyNeural', label: 'Guy · US male' },
+  { key: 'en-US-ChristopherNeural', label: 'Christopher · US male' },
+  { key: 'en-GB-SoniaNeural', label: 'Sonia · UK female' },
+  { key: 'en-GB-RyanNeural', label: 'Ryan · UK male' },
+  { key: 'en-IN-NeerjaNeural', label: 'Neerja · Indian female' },
+  { key: 'en-IN-PrabhatNeural', label: 'Prabhat · Indian male' },
+  { key: 'en-AU-NatashaNeural', label: 'Natasha · Australian female' },
+  { key: 'ta-IN-PallaviNeural', label: 'Pallavi · Tamil female' },
+  { key: 'ta-IN-ValluvarNeural', label: 'Valluvar · Tamil male' },
+  { key: 'hi-IN-SwaraNeural', label: 'Swara · Hindi female' },
+  { key: 'hi-IN-MadhurNeural', label: 'Madhur · Hindi male' },
+];
 
 // Chat message text size preference.
 export const TEXT_SIZE_KEY = 'close_ai_text_size';

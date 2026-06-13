@@ -899,7 +899,10 @@ export function AppLayout() {
   }, [isLoading, activeSession]);
 
   return (
-    <div className="flex h-screen text-[var(--ink)] overflow-hidden">
+    // fixed inset-0 (not h-screen/100vh): on mobile 100vh is taller than the
+    // visible area behind the address bar, so the whole app scrolled. Pinning to
+    // the viewport keeps it exactly full-height — only the inner panes scroll.
+    <div className="flex fixed inset-0 text-[var(--ink)] overflow-hidden">
       {/* Mobile backdrop */}
       {isSidebarOpen && (
         <div

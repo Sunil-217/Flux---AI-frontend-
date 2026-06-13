@@ -30,6 +30,7 @@ import {
   applyTextSize,
   TEXT_SIZE_KEY,
   VOICE_KEY,
+  TTS_VOICES,
   FONT_KEY,
   FONT_OPTIONS,
   applyFont,
@@ -37,6 +38,7 @@ import {
   CODE_FONT_OPTIONS,
   applyCodeFont,
 } from '@/components/layout/AccentPicker';
+import { ttsSpeak } from '@/services/api';
 
 type Tab =
   | 'account'
@@ -819,10 +821,10 @@ export function SettingsModal({
   const [textSize, setTextSize] = useState(
     (typeof window !== 'undefined' && localStorage.getItem(TEXT_SIZE_KEY)) || 'medium'
   );
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voice, setVoice] = useState(
     (typeof window !== 'undefined' && localStorage.getItem(VOICE_KEY)) || ''
   );
+  const [testingVoice, setTestingVoice] = useState(false);
   const [font, setFont] = useState(
     (typeof window !== 'undefined' && localStorage.getItem(FONT_KEY)) || 'default'
   );
@@ -849,16 +851,6 @@ export function SettingsModal({
     setLang(l);
     setLangState(l);
   };
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    const load = () => setVoices(window.speechSynthesis.getVoices());
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, []);
 
   const profileChanged = name.trim() !== (user?.name ?? '') || phone.trim() !== (user?.phone ?? '');
 
@@ -916,13 +908,23 @@ export function SettingsModal({
       /* ignore */
     }
   };
-  const testVoice = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    const u = new SpeechSynthesisUtterance('Hello! This is a preview of the selected voice.');
-    const v = window.speechSynthesis.getVoices().find((x) => x.name === voice);
-    if (v) u.voice = v;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+  const testVoice = async () => {
+    if (testingVoice) return;
+    setTestingVoice(true);
+    try {
+      // Preview with the SAME backend neural voice the read-aloud button uses,
+      // so what you hear here is exactly what you'll get on replies.
+      const blob = await ttsSpeak('Hi! This is a preview of the selected voice.', voice || undefined);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      audio.onerror = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch {
+      toast.error('Could not preview that voice. Try again.');
+    } finally {
+      setTestingVoice(false);
+    }
   };
   const pickFont = (f: string) => {
     applyFont(f);
@@ -1243,30 +1245,28 @@ export function SettingsModal({
                     ))}
                   </div>
                 </div>
-                {voices.length > 0 && (
-                  <Row title="Read-aloud voice" desc="Voice used by the read-aloud button on replies.">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={voice}
-                        onChange={(e) => pickVoice(e.target.value)}
-                        className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] max-w-[150px]"
-                      >
-                        <option value="">Default</option>
-                        {voices.map((v) => (
-                          <option key={v.name} value={v.name}>
-                            {v.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={testVoice}
-                        className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 transition-colors"
-                      >
-                        Test
-                      </button>
-                    </div>
-                  </Row>
-                )}
+                <Row title="Read-aloud voice" desc="Neural voice used by the read-aloud (speaker) button on replies.">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={voice}
+                      onChange={(e) => pickVoice(e.target.value)}
+                      className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] max-w-[180px]"
+                    >
+                      {TTS_VOICES.map((v) => (
+                        <option key={v.key} value={v.key}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={testVoice}
+                      disabled={testingVoice}
+                      className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                    >
+                      {testingVoice ? '…' : 'Test'}
+                    </button>
+                  </div>
+                </Row>
               </>
             )}
 
