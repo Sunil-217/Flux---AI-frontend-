@@ -34,19 +34,44 @@ function fmt(n: number): string {
   return String(n);
 }
 
+// The backend stores naive UTC timestamps (datetime.utcnow) and serialises them
+// with no timezone marker. JS would otherwise read them as LOCAL time and be off
+// by the user's UTC offset — so append 'Z' to force UTC, then convert to local.
+function parseUTC(iso: string | null): Date | null {
+  if (!iso) return null;
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
+  const d = new Date(hasTz ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Full local date + time, e.g. "13 Jun 2026, 10:04 PM". */
+function fmtDateTime(iso: string | null): string {
+  const d = parseUTC(iso);
+  if (!d) return '—';
+  return d.toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/** Short relative label, e.g. "6h ago" — shown as a hover hint alongside the date. */
 function timeAgo(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '—';
-  const s = Math.floor((Date.now() - then) / 1000);
+  const d = parseUTC(iso);
+  if (!d) return '';
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
+  const day = Math.floor(h / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  return `${mo}mo ago`;
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -138,7 +163,9 @@ function DashboardTab() {
                     Unverified
                   </span>
                 )}
-                <span className="flex-shrink-0 text-[11px] text-[var(--ink-4)]">{timeAgo(s.created_at)}</span>
+                <span className="flex-shrink-0 text-[11px] text-[var(--ink-4)]" title={timeAgo(s.created_at)}>
+                  {fmtDateTime(s.created_at)}
+                </span>
               </div>
             ))}
           </div>
@@ -196,8 +223,8 @@ function UserRow({
             {!u.is_verified && <Badge tone="unverified">Unverified</Badge>}
           </div>
           <p className="text-[11px] text-[var(--ink-4)] truncate">{u.email}</p>
-          <p className="text-[11px] text-[var(--ink-4)] mt-0.5">
-            {u.chat_count} chats · {u.api_key_count} keys · joined {timeAgo(u.created_at)}
+          <p className="text-[11px] text-[var(--ink-4)] mt-0.5" title={timeAgo(u.created_at)}>
+            {u.chat_count} chats · {u.api_key_count} keys · joined {fmtDateTime(u.created_at)}
           </p>
         </div>
       </div>
@@ -572,7 +599,9 @@ function AuditTab() {
                 </p>
                 {e.detail && <p className="text-[11px] text-[var(--ink-4)] mt-0.5">{e.detail}</p>}
               </div>
-              <span className="flex-shrink-0 text-[11px] text-[var(--ink-4)]">{timeAgo(e.created_at)}</span>
+              <span className="flex-shrink-0 text-[11px] text-[var(--ink-4)]" title={timeAgo(e.created_at)}>
+                {fmtDateTime(e.created_at)}
+              </span>
             </div>
           ))}
         </div>
