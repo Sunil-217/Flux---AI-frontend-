@@ -4,8 +4,8 @@ import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { uploadFile as uploadFileApi, apiError } from '@/services/api';
 
-// PDF, Word, text/markdown/CSV/JSON, and common source-code files.
-const ALLOWED_FILE = /\.(pdf|docx|txt|md|csv|json|py|js|ts|tsx|jsx|html|css|java|c|cpp|h|go|rs|rb|php|sh|ya?ml|xml|sql)$/i;
+// PDF, Word, Excel, PowerPoint, text/markdown/CSV/JSON, and common code files.
+const ALLOWED_FILE = /\.(pdf|docx|xlsx|pptx|txt|md|csv|json|py|js|ts|tsx|jsx|html|css|java|c|cpp|h|go|rs|rb|php|sh|ya?ml|xml|sql)$/i;
 
 export function useFileUpload(
   sessionId: string | null,
