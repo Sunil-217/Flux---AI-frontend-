@@ -85,7 +85,7 @@ function setHtmlTheme(theme: 'light' | 'dark') {
 // so it never remounts — important so inputs elsewhere keep focus.
 function Row({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4 border-b border-[var(--line)] last:border-0">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 py-4 border-b border-[var(--line)] last:border-0">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[var(--ink)]">{title}</p>
         {desc && <p className="text-xs text-[var(--ink-3)] mt-0.5">{desc}</p>}
@@ -1064,14 +1064,14 @@ export function SettingsModal({
           </button>
         </div>
 
-        <div className="flex flex-1 min-h-0">
-          {/* Left nav */}
-          <nav className="w-56 flex-shrink-0 border-r border-[var(--line)] bg-[var(--base)]/40 p-4 space-y-1.5 overflow-y-auto">
+        <div className="flex flex-col md:flex-row flex-1 min-h-0">
+          {/* Nav — horizontal scroll strip on mobile, sidebar column on desktop */}
+          <nav className="flex md:flex-col md:w-56 flex-shrink-0 border-b md:border-b-0 md:border-r border-[var(--line)] bg-[var(--base)]/40 p-2 md:p-4 gap-1 md:gap-1.5 overflow-x-auto md:overflow-y-auto">
             {nav.map((n) => (
               <button
                 key={n.key}
                 onClick={() => setTab(n.key)}
-                className={`flex items-center gap-3 w-full text-left px-3.5 py-2.5 rounded-xl text-sm transition-colors ${
+                className={`flex items-center gap-2 md:gap-3 flex-shrink-0 md:w-full text-left whitespace-nowrap px-3 md:px-3.5 py-2 md:py-2.5 rounded-xl text-sm transition-colors ${
                   tab === n.key
                     ? 'bg-[var(--fill-strong)] text-[var(--ink)] font-medium'
                     : 'text-[var(--ink-3)] hover:bg-[var(--fill)] hover:text-[var(--ink-2)]'
@@ -1084,7 +1084,7 @@ export function SettingsModal({
           </nav>
 
           {/* Right content */}
-          <div className="flex-1 min-w-0 overflow-y-auto px-8 py-7">
+          <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7">
             {tab === 'account' && (
               <>
                 <div className="mb-5">
