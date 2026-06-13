@@ -14,10 +14,14 @@ import {
   adminAuditLog,
   adminGetFeatures,
   adminSetFeatures,
+  adminUserApiKeys,
+  adminRevokeApiKey,
+  adminDeleteApiKey,
   apiError,
   type AdminStats,
   type AdminUser,
   type AdminAuditEntry,
+  type AdminApiKey,
   type FeatureMap,
 } from '@/services/api';
 import { useFeatures } from '@/components/providers/FeatureProvider';
@@ -209,8 +213,55 @@ function UserRow({
   const actionBtn =
     'text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
+  // ── API-key management (lazy-loaded when the row is expanded) ──
+  const [showKeys, setShowKeys] = useState(false);
+  const [keys, setKeys] = useState<AdminApiKey[] | null>(null);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [keyBusy, setKeyBusy] = useState<number | null>(null);
+
+  const loadKeys = useCallback(() => {
+    setLoadingKeys(true);
+    adminUserApiKeys(u.id)
+      .then(setKeys)
+      .catch((e) => toast.error(apiError(e, 'Could not load API keys.')))
+      .finally(() => setLoadingKeys(false));
+  }, [u.id]);
+
+  const toggleKeys = () => {
+    const next = !showKeys;
+    setShowKeys(next);
+    if (next && keys === null) loadKeys();
+  };
+
+  const revokeKey = async (id: number) => {
+    setKeyBusy(id);
+    try {
+      await adminRevokeApiKey(id);
+      setKeys((ks) => (ks ? ks.map((k) => (k.id === id ? { ...k, revoked: true } : k)) : ks));
+      toast.success('Key revoked');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not revoke key.'));
+    } finally {
+      setKeyBusy(null);
+    }
+  };
+
+  const deleteKey = async (id: number) => {
+    setKeyBusy(id);
+    try {
+      await adminDeleteApiKey(id);
+      setKeys((ks) => (ks ? ks.filter((k) => k.id !== id) : ks));
+      toast.success('Key deleted');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not delete key.'));
+    } finally {
+      setKeyBusy(null);
+    }
+  };
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 py-3 rounded-xl border border-[var(--line)] bg-[var(--fill)]">
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--fill)]">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-3.5 py-3">
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
           {u.name?.[0]?.toUpperCase() ?? 'U'}
@@ -230,6 +281,12 @@ function UserRow({
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+        <button
+          onClick={toggleKeys}
+          className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
+        >
+          {showKeys ? 'Hide keys' : `Keys (${u.api_key_count})`}
+        </button>
         {!u.is_verified && (
           <button
             disabled={busy}
@@ -284,6 +341,59 @@ function UserRow({
           Delete
         </button>
       </div>
+    </div>
+
+    {/* Expandable per-user API-key panel */}
+    {showKeys && (
+      <div className="border-t border-[var(--line)] px-3.5 py-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">
+          API keys
+        </p>
+        {loadingKeys ? (
+          <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+        ) : !keys || keys.length === 0 ? (
+          <p className="text-xs text-[var(--ink-4)]">This user has no API keys.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {keys.map((k) => (
+              <div
+                key={k.id}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg border border-[var(--line)] bg-[var(--base)]/40"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-[var(--ink)] truncate">{k.name}</p>
+                    {k.revoked && <Badge tone="banned">Revoked</Badge>}
+                  </div>
+                  <p className="text-[11px] font-mono text-[var(--ink-4)] truncate">
+                    {k.prefix} · {k.usage_count} reqs · {k.total_tokens} tokens
+                    {k.last_used_at ? ` · used ${fmtDateTime(k.last_used_at)}` : ' · never used'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {!k.revoked && (
+                    <button
+                      disabled={keyBusy === k.id}
+                      onClick={() => revokeKey(k.id)}
+                      className={`${actionBtn} border-amber-400/40 text-amber-400 hover:bg-amber-400/10`}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                  <button
+                    disabled={keyBusy === k.id}
+                    onClick={() => deleteKey(k.id)}
+                    className={`${actionBtn} border-red-400/40 text-red-400 hover:bg-red-400/10`}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
     </div>
   );
 }
@@ -555,6 +665,8 @@ const ACTION_LABEL: Record<string, string> = {
   'user.unban': 'unbanned',
   'user.delete': 'deleted',
   'features.update': 'updated feature flags',
+  'apikey.revoke': 'revoked an API key of',
+  'apikey.delete': 'deleted an API key of',
 };
 
 function AuditTab() {

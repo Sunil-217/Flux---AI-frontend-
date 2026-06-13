@@ -683,6 +683,31 @@ export async function adminAuditLog(limit = 50): Promise<AdminAuditEntry[]> {
   return res.data.entries ?? [];
 }
 
+// Admin view of any user's developer API keys (audit / revoke / delete).
+export interface AdminApiKey {
+  id: number;
+  name: string;
+  prefix: string;
+  revoked: boolean;
+  usage_count: number;
+  total_tokens: number;
+  created_at?: string | null;
+  last_used_at?: string | null;
+}
+
+export async function adminUserApiKeys(userId: number): Promise<AdminApiKey[]> {
+  const res = await client.get<{ keys: AdminApiKey[] }>(`/admin/users/${userId}/api-keys`);
+  return res.data.keys ?? [];
+}
+
+export async function adminRevokeApiKey(keyId: number): Promise<void> {
+  await client.post(`/admin/api-keys/${keyId}/revoke`);
+}
+
+export async function adminDeleteApiKey(keyId: number): Promise<void> {
+  await client.delete(`/admin/api-keys/${keyId}`);
+}
+
 // ── Feature flags ──
 export type FeatureMap = Record<string, boolean>;
 
