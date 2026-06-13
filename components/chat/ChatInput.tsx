@@ -392,8 +392,10 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
           type="file"
           // Explicit image extensions first so Edge/Windows never greys them out
           // (image/* alone is sometimes mishandled by the Windows file-dialog).
-          // Non-image extensions follow for document/code RAG ingestion.
-          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.svg,.heic,.heif,image/*,.mp4,.mov,.webm,.mkv,.avi,.mp3,.m4a,.wav,.ogg,.flac,video/*,audio/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.html,.css,.sql,.sh,.yml,.yaml,.xml"
+          // MIME types (application/pdf, text/*, …) are REQUIRED for mobile: phone
+          // file pickers match by MIME, so a bare ".pdf" extension gets greyed out
+          // on Android/iOS — that's why PDFs couldn't be selected on phone.
+          accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.svg,.heic,.heif,video/*,.mp4,.mov,.webm,.mkv,.avi,audio/*,.mp3,.m4a,.wav,.ogg,.flac,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/plain,text/markdown,text/csv,application/json,.txt,.md,.csv,.json,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.html,.css,.sql,.sh,.yml,.yaml,.xml"
           multiple
           className="hidden"
           onChange={(e) => {
