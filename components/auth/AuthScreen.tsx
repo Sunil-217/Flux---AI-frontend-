@@ -128,7 +128,13 @@ export function AuthScreen() {
 
   const doSignup = wrap(async () => {
     try {
-      await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      const r = await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      // Designated admin — server skipped OTP and returned a token: log in now.
+      if (r.auto_login && r.access_token && r.user) {
+        toast.success(`Welcome, ${r.user.name}!`);
+        login(r.access_token, r.user);
+        return;
+      }
       toast.success('Verification code sent to your email.');
       setCode('');
       setMode('otp');

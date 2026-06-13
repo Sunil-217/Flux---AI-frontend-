@@ -39,13 +39,25 @@ export interface AuthResult {
   user: User;
 }
 
+/** Signup result. For a designated admin email the server skips OTP and returns
+ *  a token (auto_login) so we log in immediately; everyone else gets the OTP flow. */
+export interface SignupResult {
+  auto_login?: boolean;
+  access_token?: string;
+  token_type?: string;
+  user?: User;
+  message?: string;
+  email?: string;
+}
+
 export async function signup(body: {
   name: string;
   email: string;
   password: string;
   phone: string;
-}): Promise<void> {
-  await client.post('/auth/signup', body);
+}): Promise<SignupResult> {
+  const res = await client.post<SignupResult>('/auth/signup', body);
+  return res.data;
 }
 
 export async function verifyOtp(email: string, code: string): Promise<AuthResult> {
