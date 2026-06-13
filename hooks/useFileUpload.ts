@@ -49,18 +49,21 @@ export function useFileUpload(
       setIsUploading(true);
       const toastId = toast.loading(`Uploading ${valid.length} file${valid.length > 1 ? 's' : ''}…`);
       let ok = 0;
+      let lastErr: unknown = null;
       for (const file of valid) {
         try {
           const filename = await uploadFileApi(file, sessionId);
           onSuccess?.(filename);
           ok += 1;
           toast.loading(`Uploading… (${ok}/${valid.length})`, { id: toastId });
-        } catch {
-          /* skip this file, keep going */
+        } catch (err) {
+          lastErr = err; // keep the real reason so we can surface it below
         }
       }
       if (ok > 0) toast.success(`Added ${ok} file${ok > 1 ? 's' : ''} — ask anything about them`, { id: toastId });
-      else toast.error('Could not upload those files.', { id: toastId });
+      // Surface the ACTUAL backend reason (e.g. "No readable text found…",
+      // "Failed to index…", "File too large…") instead of a vague catch-all.
+      else toast.error(apiError(lastErr, 'Could not upload those files.'), { id: toastId });
       setIsUploading(false);
     },
     [sessionId, isUploading, onSuccess]
