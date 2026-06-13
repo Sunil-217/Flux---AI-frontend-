@@ -299,6 +299,18 @@ export async function uploadYoutube(url: string, chatId: string): Promise<string
   return res.data.source ?? url;
 }
 
+/** Transcribe an uploaded video/audio file (Groq Whisper) and index it for Q&A. */
+export async function uploadVideo(file: File, chatId: string): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('chat_id', chatId);
+  const res = await client.post<{ source?: string }>('/upload-video', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180_000, // transcription of longer clips can take a while
+  });
+  return res.data.source || file.name;
+}
+
 /** Index a public GitHub repo's code into this chat. */
 export async function uploadGithub(url: string, chatId: string): Promise<string> {
   const res = await client.post<{ source: string }>(

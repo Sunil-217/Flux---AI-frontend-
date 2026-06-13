@@ -51,6 +51,7 @@ import {
   generateQuiz,
   uploadYoutube,
   uploadGithub,
+  uploadVideo,
   extractMemory,
 } from '@/services/api';
 import type { HistoryMessage } from '@/services/api';
@@ -255,6 +256,23 @@ export function AppLayout() {
       } catch (e) {
         toast.error(apiError(e, 'Could not add that link.'), { id: tid });
         return false;
+      }
+    },
+    [activeSessionId, addUploadedFile]
+  );
+
+  // Upload a video/audio file → transcribe (backend Whisper) → index as a
+  // source so the chat can answer questions about what was said in it.
+  const handleUploadVideo = useCallback(
+    async (file: File) => {
+      if (!activeSessionId) return;
+      const tid = toast.loading(`Transcribing ${file.name}… (this can take a moment)`);
+      try {
+        const source = await uploadVideo(file, activeSessionId);
+        toast.success('Video indexed — ask anything about it', { id: tid });
+        addUploadedFile(activeSessionId, source);
+      } catch (e) {
+        toast.error(apiError(e, 'Could not process that video.'), { id: tid });
       }
     },
     [activeSessionId, addUploadedFile]
@@ -966,6 +984,7 @@ export function AppLayout() {
           onSendMessage={handleSendMessage}
           onUploadFile={upload}
           onUploadFiles={uploadMany}
+          onUploadVideo={handleUploadVideo}
           onNewChat={handleNewChat}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onEditMessage={handleEditMessage}

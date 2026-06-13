@@ -12,6 +12,7 @@ interface Props {
   onStop?: () => void;
   injectText?: { text: string; n: number } | null;
   onUploadFiles?: (files: File[]) => void;
+  onUploadVideo?: (file: File) => void;
   onAddUrl?: () => void;
 }
 
@@ -47,6 +48,15 @@ function getRecognizer(): (new () => SpeechRecognizer) | null {
 /** True for image files even when the OS reports an empty/odd MIME type. */
 function isImageFile(f: File): boolean {
   return f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(f.name);
+}
+
+/** True for video/audio files — routed to the transcription endpoint. */
+function isVideoFile(f: File): boolean {
+  return (
+    f.type.startsWith('video/') ||
+    f.type.startsWith('audio/') ||
+    /\.(mp4|mov|webm|mkv|avi|mp3|m4a|wav|ogg|flac|mpe?g|mpga)$/i.test(f.name)
+  );
 }
 
 /**
@@ -150,7 +160,7 @@ function expandSlash(text: string): string {
   }
 }
 
-export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, injectText, onUploadFiles, onAddUrl }: Props) {
+export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, injectText, onUploadFiles, onUploadVideo, onAddUrl }: Props) {
   const t = useT();
   const [value, setValue] = useState('');
   const [image, setImage] = useState<string | null>(null);
@@ -231,12 +241,14 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
     }
   };
 
-  // "Add files or photos": images attach for vision, documents go to the doc index.
+  // "Add files or photos": images attach for vision, videos/audio are
+  // transcribed, and documents go to the doc index.
   const onPickFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files);
     arr.filter(isImageFile).forEach(handleImageFile);
-    const docs = arr.filter((f) => !isImageFile(f));
+    arr.filter((f) => !isImageFile(f) && isVideoFile(f)).forEach((v) => onUploadVideo?.(v));
+    const docs = arr.filter((f) => !isImageFile(f) && !isVideoFile(f));
     if (docs.length) onUploadFiles?.(docs);
   };
 
@@ -292,7 +304,12 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
     }
     const rec = new Recognizer();
     rec.lang = 'en-US';
-    rec.continuous = true;
+    // Mobile speech engines (esp. Android Chrome) handle continuous mode poorly —
+    // it frequently returns no result or cuts out immediately. Single-utterance
+    // dictation is far more reliable there; desktop keeps continuous dictation.
+    const isMobileDevice =
+      typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+    rec.continuous = !isMobileDevice;
     rec.interimResults = true;
     baseRef.current = value ? value.trimEnd() + ' ' : '';
     rec.onresult = (e) => {
@@ -376,7 +393,7 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
           // Explicit image extensions first so Edge/Windows never greys them out
           // (image/* alone is sometimes mishandled by the Windows file-dialog).
           // Non-image extensions follow for document/code RAG ingestion.
-          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.svg,.heic,.heif,image/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.html,.css,.sql,.sh,.yml,.yaml,.xml"
+          accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.avif,.svg,.heic,.heif,image/*,.mp4,.mov,.webm,.mkv,.avi,.mp3,.m4a,.wav,.ogg,.flac,video/*,audio/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.html,.css,.sql,.sh,.yml,.yaml,.xml"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -423,7 +440,7 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
                   <circle cx="8.5" cy="8.5" r="1.6" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-4.5-4.5L5 21.5" />
                 </svg>
-                <span className="flex-1">Add files or photos</span>
+                <span className="flex-1">Add files, photos, or video</span>
                 <span className="text-[10px] text-[var(--ink-4)]">Ctrl+U</span>
               </button>
               <button

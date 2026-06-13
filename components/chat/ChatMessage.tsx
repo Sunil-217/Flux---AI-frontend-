@@ -607,6 +607,20 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
       .replace(/```[\s\S]*?```/g, ' code block ')
       .replace(/[#*`_>~|]/g, '');
     if (!plain.trim()) return;
+    // If the user picked a specific device voice in Settings → Appearance, honor
+    // it directly. The neural backend TTS has its own fixed voice and would
+    // otherwise always win, making the voice selection appear to do nothing.
+    // No selection ⇒ use the higher-quality backend voice.
+    let chosenVoice = '';
+    try {
+      chosenVoice = localStorage.getItem(VOICE_KEY) || '';
+    } catch {
+      /* ignore */
+    }
+    if (chosenVoice) {
+      speakWithBrowser(plain);
+      return;
+    }
     const req = ++ttsReqRef.current;
     setTtsLoading(true);
     try {
@@ -715,7 +729,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
           ) : null}
           {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
         </div>
-        <div className="flex items-center gap-0.5 mt-1 mr-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+        <div className="flex items-center gap-0.5 mt-1 mr-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
           <IconButton onClick={handleCopy} title="Copy">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           </IconButton>
@@ -1072,7 +1086,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
             );
           })()}
 
-        <div className="flex items-center gap-0.5 mt-1.5 -ml-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+        <div className="flex items-center gap-0.5 mt-1.5 -ml-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
           <IconButton onClick={handleCopy} title="Copy">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           </IconButton>

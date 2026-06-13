@@ -22,6 +22,7 @@ interface Props {
   onSendMessage: (content: string, image?: string) => void;
   onUploadFile: (file: File) => void;
   onUploadFiles: (files: File[]) => void;
+  onUploadVideo: (file: File) => void;
   onNewChat: () => void;
   onToggleSidebar: () => void;
   onEditMessage: (messageId: string, newContent: string) => void;
@@ -50,6 +51,7 @@ export function ChatArea({
   onSendMessage,
   onUploadFile,
   onUploadFiles,
+  onUploadVideo,
   onNewChat,
   onToggleSidebar,
   onEditMessage,
@@ -608,6 +610,7 @@ export function ChatArea({
             onStop={onStop}
             injectText={injectText}
             onUploadFiles={onUploadFiles}
+            onUploadVideo={onUploadVideo}
             onAddUrl={onAddUrl}
           />
           <p className="text-center text-[11px] text-[var(--ink-4)] mt-2.5">
