@@ -17,17 +17,33 @@ import {
   adminUserApiKeys,
   adminRevokeApiKey,
   adminDeleteApiKey,
+  adminListBroadcasts,
+  adminCreateBroadcast,
+  adminSetBroadcastActive,
+  adminDeleteBroadcast,
+  adminListInvites,
+  adminCreateInvite,
+  adminDeleteInvite,
+  adminListWebhooks,
+  adminCreateWebhook,
+  adminUpdateWebhook,
+  adminDeleteWebhook,
+  adminTestWebhook,
   apiError,
   type AdminStats,
   type AdminUser,
   type AdminAuditEntry,
   type AdminApiKey,
+  type AdminBroadcast,
+  type BroadcastLevel,
+  type AdminInvite,
+  type AdminWebhook,
   type FeatureMap,
 } from '@/services/api';
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'features' | 'audit';
+type Tab = 'dashboard' | 'users' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -942,6 +958,17 @@ const ACTION_LABEL: Record<string, string> = {
   'apikey.delete': 'deleted an API key of',
   'apikey.block_user': 'blocked API access for',
   'apikey.unblock_user': 'unblocked API access for',
+  'broadcast.create': 'published an announcement',
+  'broadcast.activate': 'activated an announcement',
+  'broadcast.deactivate': 'deactivated an announcement',
+  'broadcast.delete': 'deleted an announcement',
+  'invite.create': 'sent an invite',
+  'invite.revoke': 'revoked an invite',
+  'webhook.create': 'created a webhook',
+  'webhook.update': 'updated a webhook',
+  'webhook.enable': 'enabled a webhook',
+  'webhook.disable': 'disabled a webhook',
+  'webhook.delete': 'deleted a webhook',
 };
 
 function AuditTab() {
@@ -997,6 +1024,530 @@ function AuditTab() {
   );
 }
 
+// ── Broadcast ───────────────────────────────────────────────────────────────
+const BROADCAST_LEVELS: { value: BroadcastLevel; label: string; dot: string }[] = [
+  { value: 'info', label: 'Info', dot: 'bg-[var(--accent)]' },
+  { value: 'warning', label: 'Warning', dot: 'bg-amber-400' },
+  { value: 'success', label: 'Success', dot: 'bg-emerald-400' },
+];
+const levelDot = (lvl: string) =>
+  lvl === 'warning' ? 'bg-amber-400' : lvl === 'success' ? 'bg-emerald-400' : 'bg-[var(--accent)]';
+
+function BroadcastTab() {
+  const [list, setList] = useState<AdminBroadcast[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+  const [level, setLevel] = useState<BroadcastLevel>('info');
+  const [posting, setPosting] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [confirmDel, setConfirmDel] = useState<AdminBroadcast | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminListBroadcasts()
+      .then(setList)
+      .catch((e) => toast.error(apiError(e, 'Could not load broadcasts.')))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(async () => {
+    try { setList(await adminListBroadcasts()); } catch { /* keep last-known */ }
+  }, []);
+
+  const post = async () => {
+    const msg = message.trim();
+    if (!msg) { toast.error('Enter a message to announce.'); return; }
+    setPosting(true);
+    try {
+      await adminCreateBroadcast(msg, level);
+      setMessage('');
+      toast.success('Announcement published — users see it on next load.');
+      await refresh();
+    } catch (e) { toast.error(apiError(e, 'Could not publish.')); }
+    finally { setPosting(false); }
+  };
+
+  const toggleActive = async (b: AdminBroadcast) => {
+    setBusyId(b.id);
+    try { await adminSetBroadcastActive(b.id, !b.active); await refresh(); }
+    catch (e) { toast.error(apiError(e, 'Could not update the announcement.')); }
+    finally { setBusyId(null); }
+  };
+
+  const del = async (b: AdminBroadcast) => {
+    setBusyId(b.id);
+    try {
+      await adminDeleteBroadcast(b.id);
+      setList((prev) => prev.filter((x) => x.id !== b.id));
+      toast.success('Announcement deleted');
+    } catch (e) { toast.error(apiError(e, 'Could not delete.')); }
+    finally { setBusyId(null); }
+  };
+
+  const active = list.find((b) => b.active) || null;
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Broadcast</h3>
+        <p className={subCls}>Show a banner to every user. One announcement is live at a time.</p>
+      </div>
+
+      {/* Compose */}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4 mb-5">
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value.slice(0, 500))}
+          rows={2}
+          placeholder="e.g. Scheduled maintenance tonight 10–11pm IST — chats may be briefly unavailable."
+          className="w-full bg-[var(--base)] border border-[var(--line)] rounded-xl px-3 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors resize-none"
+        />
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
+            {BROADCAST_LEVELS.map((l) => (
+              <button
+                key={l.value}
+                onClick={() => setLevel(l.value)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors ${
+                  level === l.value ? 'bg-[var(--fill-strong)] text-[var(--ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${l.dot}`} />
+                {l.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-[var(--ink-4)]">{message.length}/500</span>
+          <button
+            onClick={post}
+            disabled={posting || !message.trim()}
+            className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-1.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
+          >
+            {posting ? 'Publishing…' : 'Publish'}
+          </button>
+        </div>
+        {active && (
+          <p className="mt-3 text-[11px] text-[var(--ink-4)]">
+            Live now: <span className="text-[var(--ink-2)]">{active.message}</span>
+          </p>
+        )}
+      </div>
+
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">History</p>
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">No announcements yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {list.map((b) => (
+            <div key={b.id} className="flex items-start gap-3 px-3.5 py-3 rounded-xl border border-[var(--line)] bg-[var(--fill)]">
+              <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${levelDot(b.level)}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-[var(--ink)] break-words">{b.message}</p>
+                  {b.active && (
+                    <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-emerald-400 bg-emerald-400/10 rounded-full px-2 py-0.5">
+                      Live
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--ink-4)] mt-0.5" title={timeAgo(b.created_at)}>
+                  {b.created_by ? `${b.created_by} · ` : ''}{fmtDateTime(b.created_at)}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  disabled={busyId === b.id}
+                  onClick={() => toggleActive(b)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors disabled:opacity-40"
+                >
+                  {b.active ? 'Deactivate' : 'Activate'}
+                </button>
+                <button
+                  disabled={busyId === b.id}
+                  onClick={() => setConfirmDel(b)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmModal
+          title="Delete announcement"
+          message={`Delete this announcement? "${confirmDel.message.slice(0, 80)}${confirmDel.message.length > 80 ? '…' : ''}"`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => { del(confirmDel); setConfirmDel(null); }}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Invites ─────────────────────────────────────────────────────────────────
+function InvitesTab() {
+  const [list, setList] = useState<AdminInvite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [confirmDel, setConfirmDel] = useState<AdminInvite | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminListInvites()
+      .then(setList)
+      .catch((e) => toast.error(apiError(e, 'Could not load invites.')))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(async () => {
+    try { setList(await adminListInvites()); } catch { /* keep */ }
+  }, []);
+
+  const copy = (inv: AdminInvite) =>
+    navigator.clipboard?.writeText(inv.link).then(() => toast.success('Invite link copied')).catch(() => {});
+
+  const send = async () => {
+    const e = email.trim();
+    if (!e) { toast.error('Enter an email to invite.'); return; }
+    setSending(true);
+    try {
+      const inv = await adminCreateInvite(e);
+      setEmail('');
+      toast.success(`Invite created for ${inv.email}`);
+      copy(inv);
+      await refresh();
+    } catch (err) { toast.error(apiError(err, 'Could not create invite.')); }
+    finally { setSending(false); }
+  };
+
+  const revoke = async (inv: AdminInvite) => {
+    setBusyId(inv.id);
+    try {
+      await adminDeleteInvite(inv.id);
+      setList((prev) => prev.filter((x) => x.id !== inv.id));
+      toast.success('Invite revoked');
+    } catch (e) { toast.error(apiError(e, 'Could not revoke invite.')); }
+    finally { setBusyId(null); }
+  };
+
+  const statusBadge = (inv: AdminInvite) => {
+    if (inv.accepted) return <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400 bg-emerald-400/10 rounded-full px-2 py-0.5">Accepted</span>;
+    if (inv.expired) return <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-4)] bg-[var(--fill-strong)] rounded-full px-2 py-0.5">Expired</span>;
+    return <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-400 bg-amber-400/10 rounded-full px-2 py-0.5">Pending</span>;
+  };
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Invites</h3>
+        <p className={subCls}>Invite people by email — they set a password and skip verification.</p>
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); send(); }}
+        className="flex flex-col sm:flex-row gap-2 mb-5"
+      >
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="person@company.com"
+          className="flex-1 bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+        />
+        <button
+          type="submit"
+          disabled={sending || !email.trim()}
+          className="inline-flex items-center justify-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-2.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
+        >
+          {sending ? 'Creating…' : 'Send invite'}
+        </button>
+      </form>
+
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">No invites yet. Invite someone above.</p>
+      ) : (
+        <div className="space-y-2">
+          {list.map((inv) => (
+            <div key={inv.id} className="flex items-center gap-3 px-3.5 py-3 rounded-xl border border-[var(--line)] bg-[var(--fill)]">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-[var(--ink)] truncate">{inv.email}</p>
+                  {statusBadge(inv)}
+                </div>
+                <p className="text-[11px] text-[var(--ink-4)] mt-0.5" title={timeAgo(inv.created_at)}>
+                  {inv.invited_by ? `by ${inv.invited_by} · ` : ''}sent {fmtDateTime(inv.created_at)}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {!inv.accepted && !inv.expired && (
+                  <button
+                    onClick={() => copy(inv)}
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors"
+                  >
+                    Copy link
+                  </button>
+                )}
+                <button
+                  disabled={busyId === inv.id}
+                  onClick={() => setConfirmDel(inv)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+                >
+                  {inv.accepted ? 'Remove' : 'Revoke'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmModal
+          title={confirmDel.accepted ? 'Remove invite' : 'Revoke invite'}
+          message={
+            confirmDel.accepted
+              ? `Remove the accepted invite record for ${confirmDel.email}? Their account is unaffected.`
+              : `Revoke the invite for ${confirmDel.email}? Their link will stop working.`
+          }
+          confirmLabel={confirmDel.accepted ? 'Remove' : 'Revoke'}
+          danger
+          onConfirm={() => { revoke(confirmDel); setConfirmDel(null); }}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Webhooks ────────────────────────────────────────────────────────────────
+const EVENT_LABEL: Record<string, string> = {
+  'user.signup': 'User signs up',
+  'user.deleted': 'User deleted',
+  'apikey.created': 'API key created',
+  'broadcast.published': 'Broadcast published',
+};
+
+function WebhooksTab() {
+  const [hooks, setHooks] = useState<AdminWebhook[]>([]);
+  const [events, setEvents] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [newSecret, setNewSecret] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<AdminWebhook | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminListWebhooks()
+      .then(({ webhooks, events }) => { setHooks(webhooks); setEvents(events); })
+      .catch((e) => toast.error(apiError(e, 'Could not load webhooks.')))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(async () => {
+    try { const r = await adminListWebhooks(); setHooks(r.webhooks); setEvents(r.events); } catch { /* keep */ }
+  }, []);
+
+  const toggleEvent = (e: string) =>
+    setSelected((prev) => (prev.includes(e) ? prev.filter((x) => x !== e) : [...prev, e]));
+
+  const create = async () => {
+    const u = url.trim();
+    if (!/^https?:\/\//i.test(u)) { toast.error('URL must start with http:// or https://'); return; }
+    if (selected.length === 0) { toast.error('Select at least one event.'); return; }
+    setCreating(true);
+    try {
+      const wh = await adminCreateWebhook(u, selected);
+      setUrl('');
+      setSelected([]);
+      if (wh.secret) setNewSecret(wh.secret);
+      toast.success('Webhook created');
+      await refresh();
+    } catch (e) { toast.error(apiError(e, 'Could not create webhook.')); }
+    finally { setCreating(false); }
+  };
+
+  const toggleEnabled = async (h: AdminWebhook) => {
+    setBusyId(h.id);
+    try { await adminUpdateWebhook(h.id, { enabled: !h.enabled }); await refresh(); }
+    catch (e) { toast.error(apiError(e, 'Could not update webhook.')); }
+    finally { setBusyId(null); }
+  };
+
+  const test = async (h: AdminWebhook) => {
+    setBusyId(h.id);
+    try {
+      const status = await adminTestWebhook(h.id);
+      const ok = /^2\d\d$/.test(status);
+      (ok ? toast.success : toast.error)(`Test delivered — status: ${status}`);
+      await refresh();
+    } catch (e) { toast.error(apiError(e, 'Test failed.')); }
+    finally { setBusyId(null); }
+  };
+
+  const del = async (h: AdminWebhook) => {
+    setBusyId(h.id);
+    try {
+      await adminDeleteWebhook(h.id);
+      setHooks((prev) => prev.filter((x) => x.id !== h.id));
+      toast.success('Webhook deleted');
+    } catch (e) { toast.error(apiError(e, 'Could not delete webhook.')); }
+    finally { setBusyId(null); }
+  };
+
+  const statusTone = (s: string | null) => {
+    if (!s) return 'text-[var(--ink-4)]';
+    if (/^2\d\d$/.test(s)) return 'text-emerald-400';
+    return 'text-red-400';
+  };
+
+  return (
+    <>
+      <div className="mb-5">
+        <h3 className={headingCls}>Webhooks</h3>
+        <p className={subCls}>POST signed JSON to your systems when a platform event fires.</p>
+      </div>
+
+      {/* Create */}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4 mb-5">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://your-app.com/webhooks/close-ai"
+          className="w-full bg-[var(--base)] border border-[var(--line)] rounded-xl px-3 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+        />
+        <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mt-3 mb-2">Events</p>
+        <div className="flex flex-wrap gap-1.5">
+          {events.map((e) => {
+            const on = selected.includes(e);
+            return (
+              <button
+                key={e}
+                onClick={() => toggleEvent(e)}
+                className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors ${
+                  on ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent-fg)]' : 'border-[var(--line)] text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]'
+                }`}
+              >
+                {EVENT_LABEL[e] ?? e}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={create}
+            disabled={creating || !url.trim() || selected.length === 0}
+            className="inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-1.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
+          >
+            {creating ? 'Creating…' : 'Create webhook'}
+          </button>
+        </div>
+      </div>
+
+      {/* One-time secret reveal */}
+      {newSecret && (
+        <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3.5 mb-5">
+          <p className="text-xs font-medium text-[var(--ink)] mb-1">Signing secret — copy it now (shown once)</p>
+          <p className="text-[11px] text-[var(--ink-3)] mb-2">
+            Verify each delivery with the <span className="font-mono">X-CloseAI-Signature</span> header (HMAC-SHA256 of the body).
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate text-xs font-mono text-[var(--ink-2)] bg-[var(--base)] rounded-lg px-2.5 py-1.5 border border-[var(--line)]">{newSecret}</code>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(newSecret).then(() => toast.success('Secret copied')).catch(() => {}); }}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors"
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => setNewSecret(null)}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : hooks.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">No webhooks yet. Add one above.</p>
+      ) : (
+        <div className="space-y-2">
+          {hooks.map((h) => (
+            <div key={h.id} className="px-3.5 py-3 rounded-xl border border-[var(--line)] bg-[var(--fill)]">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-mono text-[var(--ink)] truncate">{h.url}</p>
+                  <p className="text-[11px] text-[var(--ink-4)] mt-0.5">
+                    {h.last_status ? (
+                      <>last delivery <span className={statusTone(h.last_status)}>{h.last_status}</span>
+                      {h.last_triggered_at ? ` · ${fmtDateTime(h.last_triggered_at)}` : ''}</>
+                    ) : (
+                      'never triggered'
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Toggle on={h.enabled} busy={busyId === h.id} onClick={() => toggleEnabled(h)} />
+                  <button
+                    disabled={busyId === h.id}
+                    onClick={() => test(h)}
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors disabled:opacity-40"
+                  >
+                    Test
+                  </button>
+                  <button
+                    disabled={busyId === h.id}
+                    onClick={() => setConfirmDel(h)}
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {h.events.map((e) => (
+                  <span key={e} className="text-[10px] font-medium text-[var(--ink-3)] bg-[var(--fill-strong)] rounded-full px-2 py-0.5">
+                    {EVENT_LABEL[e] ?? e}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmModal
+          title="Delete webhook"
+          message={`Delete the webhook to ${confirmDel.url}? Events will no longer be delivered there.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => { del(confirmDel); setConfirmDel(null); }}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Shell ─────────────────────────────────────────────────────────────────────
 const navIcon = (key: Tab) => {
   const cls = 'w-4 h-4';
@@ -1011,6 +1562,18 @@ const navIcon = (key: Tab) => {
   if (key === 'features')
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+    );
+  if (key === 'broadcast')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 11l14-6v14L3 13v-2zM3 11v2m4 .5V18a2 2 0 002 2h1a2 2 0 002-2v-2.5" /></svg>
+    );
+  if (key === 'invites')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l9 6 9-6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
+    );
+  if (key === 'webhooks')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
     );
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
@@ -1033,6 +1596,9 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   const nav: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Users' },
+    { key: 'broadcast', label: 'Broadcast' },
+    { key: 'invites', label: 'Invites' },
+    { key: 'webhooks', label: 'Webhooks' },
     { key: 'features', label: 'Features' },
     { key: 'audit', label: 'Audit log' },
   ];
@@ -1087,6 +1653,9 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
         <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7 max-w-5xl">
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
+          {tab === 'broadcast' && <BroadcastTab />}
+          {tab === 'invites' && <InvitesTab />}
+          {tab === 'webhooks' && <WebhooksTab />}
           {tab === 'features' && <FeaturesTab />}
           {tab === 'audit' && <AuditTab />}
         </div>

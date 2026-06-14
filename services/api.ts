@@ -751,3 +751,132 @@ export async function adminSetFeatures(updates: FeatureMap): Promise<FeatureMap>
   });
   return res.data.features ?? {};
 }
+
+// ── Broadcast (admin announcement banner) ──
+export type BroadcastLevel = 'info' | 'warning' | 'success';
+
+export interface Broadcast {
+  id: number;
+  message: string;
+  level: BroadcastLevel;
+  created_at: string | null;
+}
+
+export interface AdminBroadcast extends Broadcast {
+  active: boolean;
+  created_by: string | null;
+}
+
+/** Public — the currently-active announcement, or null. */
+export async function getBroadcast(): Promise<Broadcast | null> {
+  const res = await client.get<{ broadcast: Broadcast | null }>('/broadcast');
+  return res.data.broadcast ?? null;
+}
+
+export async function adminListBroadcasts(): Promise<AdminBroadcast[]> {
+  const res = await client.get<{ broadcasts: AdminBroadcast[] }>('/admin/broadcasts');
+  return res.data.broadcasts ?? [];
+}
+
+export async function adminCreateBroadcast(message: string, level: BroadcastLevel): Promise<AdminBroadcast> {
+  const res = await client.post<AdminBroadcast>('/admin/broadcasts', { message, level });
+  return res.data;
+}
+
+export async function adminSetBroadcastActive(id: number, active: boolean): Promise<AdminBroadcast> {
+  const res = await client.patch<AdminBroadcast>(`/admin/broadcasts/${id}`, { active });
+  return res.data;
+}
+
+export async function adminDeleteBroadcast(id: number): Promise<void> {
+  await client.delete(`/admin/broadcasts/${id}`);
+}
+
+// ── Invites (admin-issued onboarding links) ──
+export interface AdminInvite {
+  id: number;
+  email: string;
+  invited_by: string | null;
+  accepted: boolean;
+  expired: boolean;
+  expires_at: string | null;
+  created_at: string | null;
+  link: string;
+}
+
+export async function adminListInvites(): Promise<AdminInvite[]> {
+  const res = await client.get<{ invites: AdminInvite[] }>('/admin/invites');
+  return res.data.invites ?? [];
+}
+
+export async function adminCreateInvite(email: string): Promise<AdminInvite> {
+  const res = await client.post<AdminInvite>('/admin/invites', { email });
+  return res.data;
+}
+
+export async function adminDeleteInvite(id: number): Promise<void> {
+  await client.delete(`/admin/invites/${id}`);
+}
+
+/** Public — validate an invite link (drives the accept screen). */
+export interface InviteCheck {
+  email: string;
+  valid: boolean;
+}
+
+export async function checkInvite(token: string): Promise<InviteCheck> {
+  const res = await client.get<InviteCheck>(`/invite/${token}`);
+  return res.data;
+}
+
+/** Public — accept an invite: set name + password, returns an auth token. */
+export async function acceptInvite(body: {
+  token: string;
+  name: string;
+  password: string;
+  phone?: string;
+}): Promise<AuthResult> {
+  const res = await client.post<AuthResult>('/invite/accept', body);
+  return res.data;
+}
+
+// ── Webhooks (admin-registered outbound event notifications) ──
+export interface AdminWebhook {
+  id: number;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  created_by: string | null;
+  last_status: string | null;
+  last_triggered_at: string | null;
+  created_at: string | null;
+  secret?: string; // returned ONCE, only on creation
+}
+
+export async function adminListWebhooks(): Promise<{ webhooks: AdminWebhook[]; events: string[] }> {
+  const res = await client.get<{ webhooks: AdminWebhook[]; events: string[] }>('/admin/webhooks');
+  return { webhooks: res.data.webhooks ?? [], events: res.data.events ?? [] };
+}
+
+export async function adminCreateWebhook(url: string, events: string[]): Promise<AdminWebhook> {
+  const res = await client.post<AdminWebhook>('/admin/webhooks', { url, events });
+  return res.data;
+}
+
+export async function adminUpdateWebhook(
+  id: number,
+  patch: { enabled?: boolean; events?: string[] }
+): Promise<AdminWebhook> {
+  const res = await client.patch<AdminWebhook>(`/admin/webhooks/${id}`, patch);
+  return res.data;
+}
+
+export async function adminDeleteWebhook(id: number): Promise<void> {
+  await client.delete(`/admin/webhooks/${id}`);
+}
+
+/** Send a sample event now; returns the delivery status string (e.g. "200"). */
+export async function adminTestWebhook(id: number): Promise<string> {
+  const res = await client.post<{ ok: boolean; last_status: string | null }>(`/admin/webhooks/${id}/test`);
+  return res.data.last_status ?? 'unknown';
+}

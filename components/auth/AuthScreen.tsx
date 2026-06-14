@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import toast from 'react-hot-toast';
 import { Logo } from '@/components/layout/Logo';
@@ -12,10 +12,12 @@ import {
   resendOtp,
   forgotPassword,
   resetPassword,
+  checkInvite,
+  acceptInvite,
   apiError,
 } from '@/services/api';
 
-type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'reset';
+type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'reset' | 'invite';
 
 const inputCls =
   'w-full bg-[var(--fill)] border border-[var(--line)] rounded-xl px-3.5 py-2.5 text-[15px] text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-red-400/60 transition-colors';
@@ -105,6 +107,29 @@ export function AuthScreen() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+
+  // If the page was opened from an invite link (/?invite=TOKEN), validate the
+  // token and switch to the "accept invite" flow with the email pre-filled.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const tok = new URLSearchParams(window.location.search).get('invite');
+    if (!tok) return;
+    setInviteToken(tok);
+    setMode('invite');
+    checkInvite(tok)
+      .then((r) => setInviteEmail(r.email))
+      .catch((err) => {
+        toast.error(apiError(err, 'This invite link is invalid or has expired.'));
+        setMode('signin');
+        try {
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch {
+          /* ignore */
+        }
+      });
+  }, []);
 
   const wrap = (fn: () => Promise<void>) => async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,6 +200,26 @@ export function AuthScreen() {
     }
   });
 
+  const doAcceptInvite = wrap(async () => {
+    try {
+      const r = await acceptInvite({
+        token: inviteToken,
+        name: name.trim(),
+        password,
+        phone: phone.trim() || undefined,
+      });
+      toast.success(`Welcome, ${r.user.name}!`);
+      try {
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch {
+        /* ignore */
+      }
+      login(r.access_token, r.user);
+    } catch (err) {
+      toast.error(apiError(err, 'Could not accept the invite.'));
+    }
+  });
+
   const resend = async (which: 'otp' | 'reset') => {
     try {
       if (which === 'otp') await resendOtp(email.trim());
@@ -191,6 +236,10 @@ export function AuthScreen() {
     otp: ['Verify your email', `We sent a 6-digit code to ${email}`],
     forgot: ['Reset your password', "Enter your email and we'll send a reset code"],
     reset: ['Set a new password', `Enter the code sent to ${email}, then your new password`],
+    invite: [
+      "You're invited",
+      inviteEmail ? `Set up your Close AI account for ${inviteEmail}` : 'Set up your Close AI account',
+    ],
   };
 
   const btn =
@@ -309,6 +358,22 @@ export function AuthScreen() {
               <button type="button" onClick={() => setMode('signin')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">← Sign in</button>
               <button type="button" onClick={() => resend('reset')} className={linkCls}>Resend code</button>
             </div>
+          </form>
+        )}
+
+        {mode === 'invite' && (
+          <form onSubmit={doAcceptInvite} className="space-y-4 auth-stagger">
+            <label className="block">
+              <span className="block text-xs font-medium text-[var(--ink-3)] mb-1.5">Email</span>
+              <input value={inviteEmail} disabled placeholder="Validating invite…" className={`${inputCls} opacity-70 cursor-not-allowed`} />
+            </label>
+            <Field label="Full name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" autoFocus />
+            <Field label="Phone number" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543210 (optional)" autoComplete="tel" />
+            <PasswordField label="Create a password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" minLength={8} />
+            <button type="submit" disabled={loading || !inviteEmail} className={btn}>{loading ? 'Setting up…' : 'Accept invite & continue'}</button>
+            <p className="text-center text-sm text-[var(--ink-3)]">
+              Already have an account? <button type="button" onClick={() => setMode('signin')} className={linkCls}>Sign in</button>
+            </p>
           </form>
         )}
 

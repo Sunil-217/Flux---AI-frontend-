@@ -11,6 +11,7 @@ import { CommandPalette, type PaletteAction } from '@/components/layout/CommandP
 import { ShortcutsModal } from '@/components/layout/ShortcutsModal';
 import { PromptLibraryModal } from '@/components/layout/PromptLibraryModal';
 import { AddUrlModal } from '@/components/layout/AddUrlModal';
+import { BroadcastBanner } from '@/components/layout/BroadcastBanner';
 import { ConfirmModal } from '@/components/layout/Dialogs';
 import dynamic from 'next/dynamic';
 
@@ -928,7 +929,13 @@ export function AppLayout() {
     // fixed inset-0 (not h-screen/100vh): on mobile 100vh is taller than the
     // visible area behind the address bar, so the whole app scrolled. Pinning to
     // the viewport keeps it exactly full-height — only the inner panes scroll.
-    <div className="flex fixed inset-0 text-[var(--ink)] overflow-hidden">
+    <div className="flex flex-col fixed inset-0 text-[var(--ink)] overflow-hidden">
+      {/* Platform announcement banner (admin broadcast) — spans the full width,
+          above the sidebar + content row. Renders nothing when there's no
+          active broadcast (or the user dismissed it). */}
+      <BroadcastBanner />
+
+      <div className="relative flex flex-1 min-h-0">
       {/* Mobile backdrop */}
       {isSidebarOpen && (
         <div
@@ -1068,6 +1075,7 @@ export function AppLayout() {
           onClose={() => setConfirmClear(false)}
         />
       )}
+      </div>
     </div>
   );
 }
