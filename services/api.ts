@@ -649,6 +649,7 @@ export interface AdminUser {
   is_verified: boolean;
   is_admin: boolean;
   is_banned: boolean;
+  api_blocked: boolean; // blocked from the developer API (keys disabled + no new keys)
   is_protected: boolean; // bootstrapped superadmin — can't be demoted/banned/deleted
   created_at: string | null;
   chat_count: number;
@@ -659,6 +660,7 @@ export interface AdminUserPatch {
   is_verified?: boolean;
   is_admin?: boolean;
   is_banned?: boolean;
+  api_blocked?: boolean;
 }
 
 export interface AdminAuditEntry {

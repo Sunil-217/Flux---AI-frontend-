@@ -338,13 +338,15 @@ function DashboardTab() {
 }
 
 // ── Users ───────────────────────────────────────────────────────────────────
-function Badge({ children, tone }: { children: React.ReactNode; tone: 'admin' | 'banned' | 'unverified' }) {
+function Badge({ children, tone }: { children: React.ReactNode; tone: 'admin' | 'banned' | 'unverified' | 'api' }) {
   const cls =
     tone === 'admin'
       ? 'text-[var(--accent-fg)] bg-[var(--accent)]/10'
       : tone === 'banned'
         ? 'text-red-400 bg-red-400/10'
-        : 'text-amber-400 bg-amber-400/10';
+        : tone === 'api'
+          ? 'text-orange-400 bg-orange-400/10'
+          : 'text-amber-400 bg-amber-400/10';
   return (
     <span className={`flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${cls}`}>
       {children}
@@ -361,7 +363,7 @@ function UserRow({
 }: {
   u: AdminUser;
   selfId: number | undefined;
-  onPatch: (patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean }) => void;
+  onPatch: (patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean; api_blocked?: boolean }) => void;
   onDelete: () => void;
   busy: boolean;
 }) {
@@ -429,6 +431,7 @@ function UserRow({
             <p className="text-sm font-medium text-[var(--ink)] truncate">{u.name}</p>
             {u.is_admin && <Badge tone="admin">{u.is_protected ? 'Super Admin' : 'Admin'}</Badge>}
             {u.is_banned && <Badge tone="banned">Banned</Badge>}
+            {u.api_blocked && <Badge tone="api">API blocked</Badge>}
             {!u.is_verified && <Badge tone="unverified">Unverified</Badge>}
           </div>
           <p className="text-[11px] text-[var(--ink-4)] truncate">{u.email}</p>
@@ -488,6 +491,24 @@ function UserRow({
             className={`${actionBtn} border-amber-400/40 text-amber-400 hover:bg-amber-400/10`}
           >
             Ban
+          </button>
+        )}
+        {u.api_blocked ? (
+          <button
+            disabled={busy}
+            onClick={() => onPatch({ api_blocked: false })}
+            className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
+          >
+            Unblock API
+          </button>
+        ) : (
+          <button
+            disabled={busy}
+            title="Disable this user's API keys and prevent new ones"
+            onClick={() => onPatch({ api_blocked: true })}
+            className={`${actionBtn} border-orange-400/40 text-orange-400 hover:bg-orange-400/10`}
+          >
+            Block API
           </button>
         )}
         <button
@@ -566,7 +587,7 @@ function UsersTab() {
   const [filter, setFilter] = useState<'all' | 'admins' | 'banned' | 'unverified'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'active'>('newest');
   const [confirm, setConfirm] = useState<
-    | { kind: 'ban' | 'demote' | 'delete'; target: AdminUser }
+    | { kind: 'ban' | 'demote' | 'delete' | 'block'; target: AdminUser }
     | null
   >(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -597,7 +618,7 @@ function UsersTab() {
 
   const applyPatch = async (
     target: AdminUser,
-    patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean }
+    patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean; api_blocked?: boolean }
   ) => {
     setBusyId(target.id);
     try {
@@ -628,10 +649,11 @@ function UsersTab() {
   // Destructive actions (ban / demote / delete) confirm first; verify/unban/promote are immediate.
   const handlePatch = (
     target: AdminUser,
-    patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean }
+    patch: { is_verified?: boolean; is_admin?: boolean; is_banned?: boolean; api_blocked?: boolean }
   ) => {
     if (patch.is_banned === true) return setConfirm({ kind: 'ban', target });
     if (patch.is_admin === false) return setConfirm({ kind: 'demote', target });
+    if (patch.api_blocked === true) return setConfirm({ kind: 'block', target });
     applyPatch(target, patch);
   };
 
@@ -760,21 +782,34 @@ function UsersTab() {
               ? 'Ban user'
               : confirm.kind === 'demote'
                 ? 'Remove admin access'
-                : 'Delete user'
+                : confirm.kind === 'block'
+                  ? 'Block API access'
+                  : 'Delete user'
           }
           message={
             confirm.kind === 'ban'
               ? `Ban ${confirm.target.email}? They'll be signed out and unable to log in until unbanned.`
               : confirm.kind === 'demote'
                 ? `Remove admin access from ${confirm.target.email}? They'll lose access to this panel.`
-                : `Permanently delete ${confirm.target.email}? This wipes their account, chats, documents, API keys, and memory. This can't be undone.`
+                : confirm.kind === 'block'
+                  ? `Block API access for ${confirm.target.email}? All their API keys are revoked immediately and they can't create new ones until unblocked.`
+                  : `Permanently delete ${confirm.target.email}? This wipes their account, chats, documents, API keys, and memory. This can't be undone.`
           }
-          confirmLabel={confirm.kind === 'ban' ? 'Ban' : confirm.kind === 'demote' ? 'Demote' : 'Delete'}
+          confirmLabel={
+            confirm.kind === 'ban'
+              ? 'Ban'
+              : confirm.kind === 'demote'
+                ? 'Demote'
+                : confirm.kind === 'block'
+                  ? 'Block API'
+                  : 'Delete'
+          }
           danger
           onConfirm={() => {
             const { kind, target } = confirm;
             if (kind === 'ban') applyPatch(target, { is_banned: true });
             else if (kind === 'demote') applyPatch(target, { is_admin: false });
+            else if (kind === 'block') applyPatch(target, { api_blocked: true });
             else doDelete(target);
             setConfirm(null);
           }}
@@ -905,6 +940,8 @@ const ACTION_LABEL: Record<string, string> = {
   'features.update': 'updated feature flags',
   'apikey.revoke': 'revoked an API key of',
   'apikey.delete': 'deleted an API key of',
+  'apikey.block_user': 'blocked API access for',
+  'apikey.unblock_user': 'unblocked API access for',
 };
 
 function AuditTab() {
