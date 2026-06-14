@@ -123,8 +123,14 @@ export function Sidebar({
   } | null>(null);
 
   const searching = query.trim().length > 0;
+  const queryLower = query.trim().toLowerCase();
   const filtered = searching
-    ? sessions.filter((s) => s.title.toLowerCase().includes(query.trim().toLowerCase()))
+    ? sessions.filter((s) => {
+        // Match title OR message content (full-text chat search)
+        const titleMatch = s.title.toLowerCase().includes(queryLower);
+        const contentMatch = s.messages?.some((m) => m.content.toLowerCase().includes(queryLower));
+        return titleMatch || contentMatch;
+      })
     : sessions;
 
   // Code-mode session list (separate from chat sessions), most-recent first.

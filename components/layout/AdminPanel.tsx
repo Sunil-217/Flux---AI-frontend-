@@ -1349,6 +1349,8 @@ function WebhooksTab() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<AdminWebhook | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingEvents, setEditingEvents] = useState<string[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1407,6 +1409,18 @@ function WebhooksTab() {
       setHooks((prev) => prev.filter((x) => x.id !== h.id));
       toast.success('Webhook deleted');
     } catch (e) { toast.error(apiError(e, 'Could not delete webhook.')); }
+    finally { setBusyId(null); }
+  };
+
+  const saveEvents = async () => {
+    if (editingId === null) return;
+    setBusyId(editingId);
+    try {
+      await adminUpdateWebhook(editingId, { events: editingEvents });
+      setHooks((prev) => prev.map((h) => h.id === editingId ? { ...h, events: editingEvents } : h));
+      setEditingId(null);
+      toast.success('Webhook events updated');
+    } catch (e) { toast.error(apiError(e, 'Could not update webhook.')); }
     finally { setBusyId(null); }
   };
 
@@ -1515,6 +1529,13 @@ function WebhooksTab() {
                   </button>
                   <button
                     disabled={busyId === h.id}
+                    onClick={() => { setEditingId(h.id); setEditingEvents(h.events); }}
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors disabled:opacity-40"
+                  >
+                    Edit events
+                  </button>
+                  <button
+                    disabled={busyId === h.id}
                     onClick={() => setConfirmDel(h)}
                     className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
                   >
@@ -1543,6 +1564,48 @@ function WebhooksTab() {
           onConfirm={() => { del(confirmDel); setConfirmDel(null); }}
           onClose={() => setConfirmDel(null)}
         />
+      )}
+
+      {editingId !== null && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50" onClick={() => setEditingId(null)}>
+          <div className="bg-[var(--surface)] rounded-2xl shadow-lg w-96 p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-[var(--ink)] mb-4">Edit webhook events</h3>
+            <div className="space-y-2.5 mb-5">
+              {events.map((e) => (
+                <label key={e} className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingEvents.includes(e)}
+                    onChange={(ev) => {
+                      if (ev.target.checked) {
+                        setEditingEvents((prev) => [...prev, e]);
+                      } else {
+                        setEditingEvents((prev) => prev.filter((x) => x !== e));
+                      }
+                    }}
+                    className="w-4 h-4 rounded border border-[var(--line)] cursor-pointer"
+                  />
+                  <span className="text-sm text-[var(--ink)]">{EVENT_LABEL[e] ?? e}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2.5 justify-end">
+              <button
+                onClick={() => setEditingId(null)}
+                className="text-xs font-medium px-3 py-2 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={busyId === editingId}
+                onClick={saveEvents}
+                className="text-xs font-medium px-3 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-40"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

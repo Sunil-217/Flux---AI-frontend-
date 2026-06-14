@@ -23,11 +23,15 @@ async function mount() {
 describe('useChatSessions', () => {
   it('creates a session and makes it active', async () => {
     const { result } = await mount();
+    // The hook seeds a starter "New Chat" on mount (ChatGPT-style), so measure
+    // against that baseline rather than assuming an empty list.
+    const baseline = result.current.sessions.length;
     let id = '';
     act(() => {
       id = result.current.createSession();
     });
-    expect(result.current.sessions).toHaveLength(1);
+    expect(result.current.sessions).toHaveLength(baseline + 1);
+    expect(result.current.sessions[0].id).toBe(id); // newest is prepended
     expect(result.current.activeSessionId).toBe(id);
   });
 
@@ -98,6 +102,7 @@ describe('useChatSessions', () => {
 
   it('deleteSession removes the session and clears the active id', async () => {
     const { result } = await mount();
+    const baseline = result.current.sessions.length; // mount-time starter chat
     let id = '';
     act(() => {
       id = result.current.createSession();
@@ -105,7 +110,9 @@ describe('useChatSessions', () => {
     act(() => {
       result.current.deleteSession(id);
     });
-    expect(result.current.sessions).toHaveLength(0);
+    // The created session is gone; the starter chat remains, active id cleared.
+    expect(result.current.sessions).toHaveLength(baseline);
+    expect(result.current.sessions.some((s) => s.id === id)).toBe(false);
     expect(result.current.activeSessionId).toBeNull();
   });
 });
