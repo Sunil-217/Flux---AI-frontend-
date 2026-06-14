@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -79,12 +79,37 @@ function timeAgo(iso: string | null): string {
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-function StatCard({
+function shortDate(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+const DASH_ICON = {
+  users: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-3-3" /></svg>
+  ),
+  chat: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" /></svg>
+  ),
+  key: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4-2a6 6 0 01-7.74 5.74L9 17H7v2H5v2H2v-3l6.26-6.26A6 6 0 1121 7z" /></svg>
+  ),
+  share: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.7 10.7l6.6-3.4M8.7 13.3l6.6 3.4M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zm12 7a3 3 0 100-6 3 3 0 000 6z" /></svg>
+  ),
+};
+
+function KpiCard({
+  icon,
   label,
   value,
   hint,
   accent,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
   hint?: string;
@@ -92,13 +117,138 @@ function StatCard({
 }) {
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        accent ? 'border-[var(--accent)]/40 bg-[var(--accent)]/5' : 'border-[var(--line)] bg-[var(--fill)]'
+      className={`relative overflow-hidden rounded-2xl border p-4 ${
+        accent
+          ? 'border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/12 to-transparent'
+          : 'border-[var(--line)] bg-[var(--fill)]'
       }`}
     >
-      <p className="text-2xl font-semibold text-[var(--ink)] tabular-nums">{value}</p>
-      <p className="text-[11px] text-[var(--ink-3)] mt-1">{label}</p>
-      {hint && <p className="text-[10px] text-[var(--ink-4)] mt-0.5">{hint}</p>}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[28px] leading-none font-semibold text-[var(--ink)] tabular-nums">{value}</p>
+          <p className="text-xs text-[var(--ink-3)] mt-2">{label}</p>
+          {hint && <p className="text-[10px] text-[var(--ink-4)] mt-0.5">{hint}</p>}
+        </div>
+        <div
+          className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            accent ? 'bg-[var(--accent)]/15 text-[var(--accent-fg)]' : 'bg-[var(--fill-strong)] text-[var(--ink-3)]'
+          }`}
+        >
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: number; tone?: 'amber' | 'red' }) {
+  const color = tone === 'red' ? 'text-red-400' : tone === 'amber' ? 'text-amber-400' : 'text-[var(--ink)]';
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--fill)] px-3 py-2.5">
+      <p className={`text-lg font-semibold tabular-nums ${color}`}>{fmt(value)}</p>
+      <p className="text-[10px] text-[var(--ink-4)] mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function SignupsChart({ data }: { data: { date: string; count: number }[] }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const total = data.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-sm font-medium text-[var(--ink)]">Sign-ups · last 14 days</p>
+        <span className="text-xs text-[var(--ink-4)]">{total} total</span>
+      </div>
+      <div className="flex items-end gap-1.5 h-28">
+        {data.map((d) => {
+          const pct = d.count > 0 ? Math.max(Math.round((d.count / max) * 100), 8) : 3;
+          return (
+            <div
+              key={d.date}
+              className="flex-1 h-full flex items-end"
+              title={`${shortDate(d.date)} · ${d.count} sign-up${d.count === 1 ? '' : 's'}`}
+            >
+              <div
+                className={`w-full rounded-t-md transition-colors ${
+                  d.count > 0 ? 'bg-[var(--accent)]/70 hover:bg-[var(--accent)]' : 'bg-[var(--fill-strong)]'
+                }`}
+                style={{ height: `${pct}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-between mt-2 text-[10px] text-[var(--ink-4)]">
+        <span>{shortDate(data[0]?.date)}</span>
+        <span>Today</span>
+      </div>
+    </div>
+  );
+}
+
+function SystemHealth({ system }: { system: AdminStats['system'] }) {
+  const providers: [string, boolean][] = [
+    ['NVIDIA NIM', system.providers.nvidia],
+    ['Groq', system.providers.groq],
+    ['Tavily (web)', system.providers.tavily],
+    ['Email (SMTP)', system.providers.email],
+  ];
+  const isPg = system.database === 'PostgreSQL';
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+      <p className="text-sm font-medium text-[var(--ink)] mb-3">System health</p>
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--ink-3)]">Database</span>
+          <span className={`font-medium ${isPg ? 'text-emerald-400' : 'text-amber-400'}`}>
+            {system.database}
+            {!isPg && <span className="text-[var(--ink-4)] font-normal"> · not persistent</span>}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--ink-3)]">Environment</span>
+          <span className="font-medium text-[var(--ink-2)] capitalize">{system.environment}</span>
+        </div>
+      </div>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--ink-4)] mt-4 mb-2">AI providers</p>
+      <div className="grid grid-cols-2 gap-2">
+        {providers.map(([name, on]) => (
+          <div key={name} className="flex items-center gap-2 text-xs">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${on ? 'bg-emerald-400' : 'bg-[var(--ink-4)]'}`} />
+            <span className={on ? 'text-[var(--ink-2)]' : 'text-[var(--ink-4)]'}>{name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopUsers({ users }: { users: AdminStats['top_users'] }) {
+  return (
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+      <p className="text-sm font-medium text-[var(--ink)] mb-3">Most active users</p>
+      {users.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">No activity yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {users.map((u, i) => (
+            <div key={u.id} className="flex items-center gap-3">
+              <span className="w-5 text-center text-xs font-semibold text-[var(--ink-4)]">{i + 1}</span>
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
+                {u.name?.[0]?.toUpperCase() ?? 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-[var(--ink)] truncate">{u.name}</p>
+                <p className="text-[10px] text-[var(--ink-4)] truncate">{u.email}</p>
+              </div>
+              <span className="text-xs font-medium text-[var(--ink-2)] tabular-nums flex-shrink-0">
+                {fmt(u.chat_count)} chats
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -127,34 +277,42 @@ function DashboardTab() {
         <p className={subCls}>Platform health at a glance.</p>
       </div>
 
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">Users</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total users" value={fmt(u.total)} accent />
-        <StatCard label="Verified" value={fmt(u.verified)} hint={`${u.unverified} unverified`} />
-        <StatCard label="Admins" value={fmt(u.admins)} />
-        <StatCard label="Banned" value={fmt(u.banned)} />
-        <StatCard label="New · 7 days" value={fmt(u.new_7d)} />
-        <StatCard label="New · 30 days" value={fmt(u.new_30d)} />
+      {/* KPI hero */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+        <KpiCard icon={DASH_ICON.users} label="Total users" value={fmt(u.total)} hint={`+${u.new_7d} this week`} accent />
+        <KpiCard icon={DASH_ICON.chat} label="Total chats" value={fmt(c.chats)} />
+        <KpiCard icon={DASH_ICON.key} label="API calls" value={fmt(c.api_calls)} hint={`${c.active_api_keys} active keys`} />
+        <KpiCard icon={DASH_ICON.share} label="Shared links" value={fmt(c.shared_chats)} />
       </div>
 
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">Content & usage</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Total chats" value={fmt(c.chats)} />
-        <StatCard label="API keys" value={fmt(c.api_keys)} hint={`${c.active_api_keys} active`} />
-        <StatCard label="API calls" value={fmt(c.api_calls)} />
-        <StatCard label="Shared links" value={fmt(c.shared_chats)} />
-        <StatCard label="Users with memory" value={fmt(c.memory_users)} />
+      {/* Mini stats */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
+        <MiniStat label="Verified" value={u.verified} />
+        <MiniStat label="Unverified" value={u.unverified} tone={u.unverified > 0 ? 'amber' : undefined} />
+        <MiniStat label="Admins" value={u.admins} />
+        <MiniStat label="Banned" value={u.banned} tone={u.banned > 0 ? 'red' : undefined} />
+        <MiniStat label="New · 30d" value={u.new_30d} />
+        <MiniStat label="w/ memory" value={c.memory_users} />
       </div>
 
+      {/* Chart */}
+      <div className="mb-5">
+        <SignupsChart data={stats.signups_by_day} />
+      </div>
+
+      {/* System + Top users */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
+        <SystemHealth system={stats.system} />
+        <TopUsers users={stats.top_users} />
+      </div>
+
+      {/* Recent signups */}
       {stats.recent_signups.length > 0 && (
-        <div className="pt-2">
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
           <p className="text-sm font-medium text-[var(--ink)] mb-3">Recent sign-ups</p>
           <div className="space-y-2">
             {stats.recent_signups.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-[var(--fill)]"
-              >
+              <div key={s.id} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
                   {s.name?.[0]?.toUpperCase() ?? 'U'}
                 </div>
@@ -405,6 +563,8 @@ function UsersTab() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<'all' | 'admins' | 'banned' | 'unverified'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'active'>('newest');
   const [confirm, setConfirm] = useState<
     | { kind: 'ban' | 'demote' | 'delete'; target: AdminUser }
     | null
@@ -475,6 +635,45 @@ function UsersTab() {
     applyPatch(target, patch);
   };
 
+  // Client-side filter + sort over the loaded page (search hits the server).
+  const displayed = useMemo(() => {
+    let list = users;
+    if (filter === 'admins') list = list.filter((u) => u.is_admin);
+    else if (filter === 'banned') list = list.filter((u) => u.is_banned);
+    else if (filter === 'unverified') list = list.filter((u) => !u.is_verified);
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'active') return b.chat_count - a.chat_count;
+      const ta = a.created_at ? Date.parse(a.created_at) : 0;
+      const tb = b.created_at ? Date.parse(b.created_at) : 0;
+      return sortBy === 'oldest' ? ta - tb : tb - ta;
+    });
+    return sorted;
+  }, [users, filter, sortBy]);
+
+  const exportCsv = () => {
+    const header = ['id', 'name', 'email', 'phone', 'verified', 'admin', 'banned', 'chats', 'api_keys', 'created_at'];
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = displayed.map((u) => [
+      u.id, u.name, u.email, u.phone ?? '', u.is_verified, u.is_admin, u.is_banned, u.chat_count, u.api_key_count, u.created_at ?? '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `close-ai-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${displayed.length} user${displayed.length === 1 ? '' : 's'}`);
+  };
+
   return (
     <>
       <div className="mb-4">
@@ -496,13 +695,52 @@ function UsersTab() {
         />
       </div>
 
+      {/* Filter chips + sort + export */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
+          {(['all', 'admins', 'banned', 'unverified'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-2.5 py-1 rounded-md text-xs capitalize transition-colors ${
+                filter === f ? 'bg-[var(--fill-strong)] text-[var(--ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+          className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="name">Name (A–Z)</option>
+          <option value="active">Most active</option>
+        </select>
+        <button
+          onClick={exportCsv}
+          disabled={displayed.length === 0}
+          className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors disabled:opacity-40"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
+
       {loading ? (
         <p className="text-xs text-[var(--ink-4)]">Loading users…</p>
-      ) : users.length === 0 ? (
-        <p className="text-xs text-[var(--ink-4)]">No users {query ? 'match that search' : 'yet'}.</p>
+      ) : displayed.length === 0 ? (
+        <p className="text-xs text-[var(--ink-4)]">
+          No users {query ? 'match that search' : filter !== 'all' ? `in “${filter}”` : 'yet'}.
+        </p>
       ) : (
         <div className="space-y-2">
-          {users.map((u) => (
+          {displayed.map((u) => (
             <UserRow
               key={u.id}
               u={u}

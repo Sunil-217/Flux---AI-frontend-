@@ -625,6 +625,13 @@ export interface AdminStats {
     shared_chats: number;
     memory_users: number;
   };
+  signups_by_day: { date: string; count: number }[];
+  top_users: { id: number; name: string; email: string; chat_count: number }[];
+  system: {
+    database: string;
+    environment: string;
+    providers: { nvidia: boolean; groq: boolean; tavily: boolean; email: boolean };
+  };
   recent_signups: {
     id: number;
     name: string;
