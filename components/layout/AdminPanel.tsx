@@ -1712,8 +1712,8 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           ))}
         </nav>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7 max-w-5xl">
+        {/* Content — fills the full page width (no max-width cap) */}
+        <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7">
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
           {tab === 'broadcast' && <BroadcastTab />}
