@@ -414,16 +414,18 @@ export function CodeView({
     );
 
   const readContext = async (paths: string[]): Promise<CodeContextFile[]> => {
-    const out: CodeContextFile[] = [];
-    for (const p of paths.slice(0, 8)) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        out.push({ path: p, content: await readFileText(dir, p) });
-      } catch {
-        /* skip unreadable/oversized */
-      }
-    }
-    return out;
+    // Read all context files concurrently — gathering 8 files is I/O-bound, so
+    // reading them in parallel is far faster than one-at-a-time.
+    const results = await Promise.all(
+      paths.slice(0, 8).map(async (p) => {
+        try {
+          return { path: p, content: await readFileText(dir, p) } as CodeContextFile;
+        } catch {
+          return null; // skip unreadable/oversized
+        }
+      })
+    );
+    return results.filter((r): r is CodeContextFile => r !== null);
   };
 
   const send = async () => {
@@ -470,36 +472,40 @@ export function CodeView({
       const planId = pushPlan(plan.notes || `Editing ${steps.length} file(s)…`, steps);
 
       const produced: Record<string, Proposal> = {};
-      for (let i = 0; i < plan.files.length; i++) {
-        const step = plan.files[i];
-        setStep(planId, i, 'running');
-        let original = '';
-        let isNew = step.action === 'create';
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          original = await readFileText(dir, step.path);
-        } catch (e) {
-          if (String((e as Error)?.message).includes('too large')) {
-            setStep(planId, i, 'skipped');
-            continue;
+      // Run the per-file rewrites CONCURRENTLY. Each file is an independent LLM
+      // call, so a multi-file change now completes in ~the time of the slowest
+      // single file instead of the sum of them all. Steps still flip to
+      // running/done/failed individually as each settles. (JS is single-threaded,
+      // so writing into `produced` from these callbacks is race-free.)
+      await Promise.all(
+        plan.files.map(async (step, i) => {
+          setStep(planId, i, 'running');
+          let original = '';
+          let isNew = step.action === 'create';
+          try {
+            original = await readFileText(dir, step.path);
+          } catch (e) {
+            if (String((e as Error)?.message).includes('too large')) {
+              setStep(planId, i, 'skipped');
+              return;
+            }
+            isNew = true;
+            original = '';
           }
-          isNew = true;
-          original = '';
-        }
-        let newContent = '';
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          newContent = await editCodeFile(step.path, original, task, history);
-        } catch {
-          newContent = '';
-        }
-        if (newContent && newContent.trim() && newContent !== original) {
-          produced[step.path] = { original, newContent, isNew };
-          setStep(planId, i, 'done');
-        } else {
-          setStep(planId, i, 'failed');
-        }
-      }
+          let newContent = '';
+          try {
+            newContent = await editCodeFile(step.path, original, task, history);
+          } catch {
+            newContent = '';
+          }
+          if (newContent && newContent.trim() && newContent !== original) {
+            produced[step.path] = { original, newContent, isNew };
+            setStep(planId, i, 'done');
+          } else {
+            setStep(planId, i, 'failed');
+          }
+        })
+      );
 
       const changed = Object.keys(produced);
       if (changed.length) {
@@ -737,16 +743,32 @@ export function CodeView({
           </div>
           </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center px-8 border-r border-[var(--line)]">
-              <p className="text-sm text-[var(--ink-2)] mb-1">Open a project folder for this chat.</p>
-              <p className="text-xs text-[var(--ink-4)] mb-5 max-w-sm">
-                Each code chat has its own folder + memory (like Claude Code). The agent plans, edits,
-                and you accept the diffs. Terminal commands aren&apos;t available in a browser.
-              </p>
-              <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
-                {loadingFolder ? 'Reading…' : 'Open folder'}
-              </button>
+            <div className="code3d-scene flex-1 flex flex-col items-center justify-center text-center px-8 border-r border-[var(--line)] overflow-hidden">
+              <div className="code3d-rise flex flex-col items-center">
+                {/* Subtle floating 3D "code panel" motif (existing accent/surfaces) */}
+                <div className="relative mb-9" aria-hidden>
+                  <div className="code3d-glow" />
+                  <div className="code3d-stack">
+                    <div className="code3d-panel p1" />
+                    <div className="code3d-panel p2" />
+                    <div className="code3d-panel flex flex-col justify-center gap-2 px-4">
+                      <div className="code3d-line accent" style={{ width: '46%' }} />
+                      <div className="code3d-line" style={{ width: '82%' }} />
+                      <div className="code3d-line" style={{ width: '64%' }} />
+                      <div className="code3d-line" style={{ width: '73%' }} />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-[var(--ink-2)] mb-1">Open a project folder for this chat.</p>
+                <p className="text-xs text-[var(--ink-4)] mb-5 max-w-sm">
+                  Each code chat has its own folder + memory (like Claude Code). The agent plans, edits,
+                  and you accept the diffs. Terminal commands aren&apos;t available in a browser.
+                </p>
+                <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
+                  {loadingFolder ? 'Reading…' : 'Open folder'}
+                </button>
+              </div>
             </div>
           )}
 

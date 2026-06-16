@@ -327,3 +327,57 @@ input:focus-visible {
     height: auto !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CODE MODE landing — a subtle, premium 3D motif: a gently floating stack of
+   layered panels in perspective (a "code file" hovering in space). Uses the
+   EXISTING accent + surface tokens, so the warm identity is unchanged — this
+   only adds depth + motion. GPU-only transforms; respects reduced-motion.
+   ──────────────────────────────────────────────────────────────────────── */
+.code3d-scene { perspective: 1100px; }
+.code3d-stack {
+  position: relative;
+  width: 138px;
+  height: 100px;
+  transform-style: preserve-3d;
+  animation: code3d-float 7s ease-in-out infinite;
+}
+.code3d-panel {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(150deg, var(--elevated), var(--panel));
+  box-shadow: 0 18px 42px -22px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.code3d-panel.p1 { transform: translateZ(-46px) translateY(17px) scale(0.88); opacity: 0.45; }
+.code3d-panel.p2 { transform: translateZ(-23px) translateY(8px) scale(0.94); opacity: 0.72; }
+.code3d-line { height: 6px; border-radius: 3px; background: var(--fill-strong); }
+.code3d-line.accent { background: color-mix(in srgb, var(--accent) 65%, transparent); }
+.code3d-glow {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 210px;
+  height: 170px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  filter: blur(22px);
+  pointer-events: none;
+}
+.code3d-rise { animation: code3d-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes code3d-float {
+  0%, 100% { transform: rotateX(13deg) rotateY(-17deg) translateY(0); }
+  50% { transform: rotateX(13deg) rotateY(-11deg) translateY(-10px); }
+}
+@keyframes code3d-rise {
+  from { opacity: 0; transform: perspective(1000px) rotateX(7deg) translateY(22px); }
+  to { opacity: 1; transform: perspective(1000px) rotateX(0) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .code3d-stack,
+  .code3d-rise {
+    animation: none;
+  }
+}
