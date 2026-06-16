@@ -1032,6 +1032,7 @@ export function AppLayout() {
           onAddUrl={handleAddUrl}
           followups={followups}
           onPickFollowup={handleSendMessage}
+          onPickPrompt={usePrompt}
           injectText={draft}
           allSessions={sessions}
           allFolders={folders}

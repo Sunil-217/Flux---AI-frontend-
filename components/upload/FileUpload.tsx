@@ -57,11 +57,11 @@ export function FileUpload({ onUpload, isUploading, uploadedFile, disabled }: Pr
         disabled={isDisabled}
         className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl border transition-all ${
           isDragging
-            ? 'border-red-400/60 bg-red-400/10 text-[var(--accent-fg)]'
+            ? 'border-[var(--accent)]/60 bg-[var(--accent)]/10 text-[var(--accent-fg)]'
             : isDisabled
             ? 'border-[var(--line)] text-[var(--ink-4)] cursor-not-allowed'
             : uploadedFile
-            ? 'border-red-400/30 bg-red-400/10 text-[var(--accent-fg)] hover:bg-red-400/[0.16]'
+            ? 'border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent-fg)] hover:bg-[var(--accent)]/[0.16]'
             : 'border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--fill)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]'
         }`}
       >

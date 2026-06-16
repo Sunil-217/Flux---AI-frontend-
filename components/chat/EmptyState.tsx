@@ -11,7 +11,7 @@
  * no new backend, no settings, no decoration.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Logo } from '@/components/layout/Logo';
 import { Agenda, deriveAgenda } from './Agenda';
 import { useT } from '@/lib/i18n';
@@ -26,7 +26,45 @@ interface Props {
   allFolders?: Folder[];
   currentSessionId?: string;
   onSelectSession?: (id: string) => void;
+  /** Inject a starter prompt into the composer (user can edit before sending). */
+  onPickPrompt?: (text: string) => void;
 }
+
+/* Capability-hinting starters shown in an empty chat — each drops a prompt
+   stub into the composer so a new user always has an obvious first move. */
+const STARTERS: { label: string; text: string; icon: ReactNode }[] = [
+  {
+    label: 'Summarize a document',
+    text: 'Summarize the key points of this document: ',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
+    ),
+  },
+  {
+    label: 'Research a topic',
+    text: 'Research the latest developments in ',
+    icon: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+      </>
+    ),
+  },
+  {
+    label: 'Write code',
+    text: 'Write clean, working code that ',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+    ),
+  },
+  {
+    label: 'Explain simply',
+    text: 'Explain this in simple terms: ',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M7 14a5 5 0 119 0c0 2-2 2.5-2 4H9c0-1.5-2-2-2-4z" />
+    ),
+  },
+];
 
 function relTime(ts?: number): string {
   if (!ts) return '';
@@ -66,6 +104,7 @@ export function EmptyState({
   allFolders,
   currentSessionId,
   onSelectSession,
+  onPickPrompt,
 }: Props) {
   const t = useT();
   const [facts, setFacts] = useState<string[]>([]);
@@ -168,6 +207,31 @@ export function EmptyState({
           >
             Start a new chat
           </button>
+        )}
+
+        {/* Starter prompts — only when a chat is open & ready for input. Each
+            drops a stub into the composer so the first move is always obvious. */}
+        {hasSession && onPickPrompt && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 max-w-xl">
+            {STARTERS.map((s) => (
+              <button
+                key={s.label}
+                onClick={() => onPickPrompt(s.text)}
+                className="group inline-flex items-center gap-2 text-[13px] text-[var(--ink-2)] border border-[var(--line)] hover:border-[var(--line-strong)] hover:bg-[var(--fill)] rounded-full px-3.5 py-2 transition-colors"
+              >
+                <svg
+                  className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-fg)]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  {s.icon}
+                </svg>
+                {s.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     );

@@ -309,7 +309,7 @@ export function Sidebar({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={isCode ? 'Search code chats…' : t('Search chats…')}
-              className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-red-400/60 transition-colors"
+              className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)]/60 transition-colors"
             />
           </div>
         </div>

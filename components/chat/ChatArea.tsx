@@ -34,6 +34,7 @@ interface Props {
   onAddUrl: () => void;
   followups: string[];
   onPickFollowup: (q: string) => void;
+  onPickPrompt?: (text: string) => void;
   injectText?: { text: string; n: number } | null;
   // Workspace Home data: lets the empty state show the Agenda + "continue
   // where you left off" + knowledge totals instead of a blank-chat greeting.
@@ -63,6 +64,7 @@ export function ChatArea({
   onAddUrl,
   followups,
   onPickFollowup,
+  onPickPrompt,
   injectText,
   allSessions,
   allFolders,
@@ -535,6 +537,7 @@ export function ChatArea({
             allFolders={allFolders}
             currentSessionId={session?.id}
             onSelectSession={onSelectSession}
+            onPickPrompt={onPickPrompt}
           />
         ) : (
           <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-8 space-y-7">

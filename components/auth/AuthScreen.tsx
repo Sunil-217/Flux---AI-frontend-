@@ -20,7 +20,7 @@ import {
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'reset' | 'invite';
 
 const inputCls =
-  'w-full bg-[var(--fill)] border border-[var(--line)] rounded-xl px-3.5 py-2.5 text-[15px] text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-red-400/60 transition-colors';
+  'w-full bg-[var(--fill)] border border-[var(--line)] rounded-xl px-3.5 py-2.5 text-[15px] text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)]/60 transition-colors';
 
 function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (

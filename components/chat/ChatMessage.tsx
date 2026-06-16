@@ -693,7 +693,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
             onChange={(e) => { setEditValue(e.target.value); autoResize(); }}
             onKeyDown={handleKeyDown}
             rows={1}
-            className="w-full bg-[var(--fill)] text-[var(--ink)] rounded-2xl px-4 py-3 text-[length:var(--chat-font-size,15px)] resize-none outline-none border border-red-400/50 transition-colors leading-7"
+            className="w-full bg-[var(--fill)] text-[var(--ink)] rounded-2xl px-4 py-3 text-[length:var(--chat-font-size,15px)] resize-none outline-none border border-[var(--accent)]/50 transition-colors leading-7"
             style={{ maxHeight: '240px', overflowY: 'auto' }}
           />
           <div className="flex items-center justify-end gap-2 mt-2">
