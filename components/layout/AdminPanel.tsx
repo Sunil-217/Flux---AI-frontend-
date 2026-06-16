@@ -21,6 +21,9 @@ import {
   adminCreateBroadcast,
   adminSetBroadcastActive,
   adminDeleteBroadcast,
+  announcementAudience,
+  adminUserActivity,
+  type UserActivity,
   adminListInvites,
   adminCreateInvite,
   adminDeleteInvite,
@@ -395,6 +398,23 @@ function UserRow({
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [keyBusy, setKeyBusy] = useState<number | null>(null);
 
+  // ── Activity timeline (lazy-loaded when the row is expanded) ──
+  const [showActivity, setShowActivity] = useState(false);
+  const [activity, setActivity] = useState<UserActivity | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+
+  const toggleActivity = () => {
+    const next = !showActivity;
+    setShowActivity(next);
+    if (next && activity === null) {
+      setLoadingActivity(true);
+      adminUserActivity(u.id)
+        .then(setActivity)
+        .catch((e) => toast.error(apiError(e, 'Could not load activity.')))
+        .finally(() => setLoadingActivity(false));
+    }
+  };
+
   const loadKeys = useCallback(() => {
     setLoadingKeys(true);
     adminUserApiKeys(u.id)
@@ -458,6 +478,12 @@ function UserRow({
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+        <button
+          onClick={toggleActivity}
+          className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
+        >
+          {showActivity ? 'Hide log' : 'Activity'}
+        </button>
         <button
           onClick={toggleKeys}
           className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
@@ -586,6 +612,65 @@ function UserRow({
               </div>
             ))}
           </div>
+        )}
+      </div>
+    )}
+
+    {/* Expandable per-user activity timeline */}
+    {showActivity && (
+      <div className="border-t border-[var(--line)] px-3.5 py-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">
+          Activity
+        </p>
+        {loadingActivity ? (
+          <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+        ) : !activity ? (
+          <p className="text-xs text-[var(--ink-4)]">No activity available.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {([
+                ['Chats', activity.footprint.chats],
+                ['API keys', activity.footprint.api_keys],
+                ['Memory', activity.footprint.memory_facts],
+                ['Shared', activity.footprint.shared_chats],
+              ] as [string, number][]).map(([label, n]) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center gap-1 text-[11px] rounded-md px-2 py-0.5 border border-[var(--line)] bg-[var(--base)]/40 text-[var(--ink-3)]"
+                >
+                  <span className="font-semibold text-[var(--ink-2)]">{n}</span> {label}
+                </span>
+              ))}
+            </div>
+            {activity.events.length === 0 ? (
+              <p className="text-xs text-[var(--ink-4)]">No recorded events.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {activity.events.map((ev, i) => (
+                  <div
+                    key={`${ev.type}-${ev.at}-${i}`}
+                    className="flex items-start gap-3 px-3 py-2 rounded-lg border border-[var(--line)] bg-[var(--base)]/40"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-[var(--ink-2)] break-words">
+                        <span className="text-[var(--ink)] font-medium">
+                          {ev.label ?? ACTION_LABEL[ev.type] ?? ev.type}
+                        </span>
+                        {ev.actor && <span className="text-[var(--ink-4)]"> · by {ev.actor}</span>}
+                      </p>
+                      {ev.detail && (
+                        <p className="text-[11px] text-[var(--ink-4)] mt-0.5 break-words">{ev.detail}</p>
+                      )}
+                    </div>
+                    <span className="flex-shrink-0 text-[11px] text-[var(--ink-4)]" title={timeAgo(ev.at)}>
+                      {fmtDateTime(ev.at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     )}
@@ -1041,6 +1126,18 @@ function BroadcastTab() {
   const [posting, setPosting] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<AdminBroadcast | null>(null);
+  // Email-all-users options for the composer.
+  const [subject, setSubject] = useState('');
+  const [emailUsers, setEmailUsers] = useState(false);
+  const [audience, setAudience] = useState<number | null>(null);
+  const [confirmEmail, setConfirmEmail] = useState(false);
+
+  // Fetch the recipient count the first time "email all" is switched on.
+  useEffect(() => {
+    if (emailUsers && audience === null) {
+      announcementAudience().then(setAudience).catch(() => setAudience(null));
+    }
+  }, [emailUsers, audience]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1060,12 +1157,28 @@ function BroadcastTab() {
     if (!msg) { toast.error('Enter a message to announce.'); return; }
     setPosting(true);
     try {
-      await adminCreateBroadcast(msg, level);
+      const res = await adminCreateBroadcast(msg, level, {
+        subject: subject.trim() || undefined,
+        emailUsers,
+      });
       setMessage('');
-      toast.success('Announcement published — users see it on next load.');
+      setSubject('');
+      const emailed = res.emailed ?? 0;
+      toast.success(
+        emailed > 0
+          ? `Published — banner live + emailing ${emailed} user${emailed === 1 ? '' : 's'}.`
+          : 'Announcement published — users see it on next load.'
+      );
       await refresh();
     } catch (e) { toast.error(apiError(e, 'Could not publish.')); }
     finally { setPosting(false); }
+  };
+
+  // Emailing everyone is a one-way action — confirm first. Banner-only publishes immediately.
+  const requestPublish = () => {
+    if (!message.trim()) { toast.error('Enter a message to announce.'); return; }
+    if (emailUsers) { setConfirmEmail(true); return; }
+    post();
   };
 
   const toggleActive = async (b: AdminBroadcast) => {
@@ -1090,12 +1203,20 @@ function BroadcastTab() {
   return (
     <>
       <div className="mb-5">
-        <h3 className={headingCls}>Broadcast</h3>
-        <p className={subCls}>Show a banner to every user. One announcement is live at a time.</p>
+        <h3 className={headingCls}>Announcements</h3>
+        <p className={subCls}>Post an in-app banner to every user — and optionally email it to them too.</p>
       </div>
 
       {/* Compose */}
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4 mb-5">
+        {emailUsers && (
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value.slice(0, 120))}
+            placeholder="Email subject — defaults to “Announcement from Close AI”"
+            className="w-full mb-2 bg-[var(--base)] border border-[var(--line)] rounded-xl px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+          />
+        )}
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value.slice(0, 500))}
@@ -1120,13 +1241,29 @@ function BroadcastTab() {
           </div>
           <span className="text-[11px] text-[var(--ink-4)]">{message.length}/500</span>
           <button
-            onClick={post}
+            onClick={requestPublish}
             disabled={posting || !message.trim()}
             className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-1.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
           >
-            {posting ? 'Publishing…' : 'Publish'}
+            {posting ? 'Publishing…' : emailUsers ? 'Publish & email' : 'Publish'}
           </button>
         </div>
+
+        {/* Also-email-all-users toggle */}
+        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[var(--line)]">
+          <Toggle on={emailUsers} busy={false} onClick={() => setEmailUsers((v) => !v)} />
+          <div className="min-w-0">
+            <p className="text-sm text-[var(--ink-2)]">Also email all users</p>
+            <p className="text-[11px] text-[var(--ink-4)]">
+              {emailUsers
+                ? audience === null
+                  ? 'Counting recipients…'
+                  : `Sends a branded email to ${audience} verified user${audience === 1 ? '' : 's'}.`
+                : 'Off — shows the in-app banner only.'}
+            </p>
+          </div>
+        </div>
+
         {active && (
           <p className="mt-3 text-[11px] text-[var(--ink-4)]">
             Live now: <span className="text-[var(--ink-2)]">{active.message}</span>
@@ -1176,6 +1313,16 @@ function BroadcastTab() {
             </div>
           ))}
         </div>
+      )}
+
+      {confirmEmail && (
+        <ConfirmModal
+          title="Email all users?"
+          message={`This publishes the banner and emails ${audience ?? 'all'} verified user${audience === 1 ? '' : 's'} a branded announcement. Emails can't be unsent.`}
+          confirmLabel="Publish & email"
+          onConfirm={() => { setConfirmEmail(false); post(); }}
+          onClose={() => setConfirmEmail(false)}
+        />
       )}
 
       {confirmDel && (
@@ -1659,7 +1806,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   const nav: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Users' },
-    { key: 'broadcast', label: 'Broadcast' },
+    { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
     { key: 'webhooks', label: 'Webhooks' },
     { key: 'features', label: 'Features' },

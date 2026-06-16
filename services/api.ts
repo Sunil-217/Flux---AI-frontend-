@@ -778,8 +778,41 @@ export async function adminListBroadcasts(): Promise<AdminBroadcast[]> {
   return res.data.broadcasts ?? [];
 }
 
-export async function adminCreateBroadcast(message: string, level: BroadcastLevel): Promise<AdminBroadcast> {
-  const res = await client.post<AdminBroadcast>('/admin/broadcasts', { message, level });
+export async function adminCreateBroadcast(
+  message: string,
+  level: BroadcastLevel,
+  opts?: { subject?: string; emailUsers?: boolean }
+): Promise<AdminBroadcast & { emailed?: number }> {
+  const res = await client.post<AdminBroadcast & { emailed?: number }>('/admin/broadcasts', {
+    message,
+    level,
+    subject: opts?.subject,
+    email_users: opts?.emailUsers ?? false,
+  });
+  return res.data;
+}
+
+/** How many users an email announcement would reach (verified, not banned). */
+export async function announcementAudience(): Promise<number> {
+  const res = await client.get<{ recipients: number }>('/admin/announcement-audience');
+  return res.data.recipients ?? 0;
+}
+
+// ── Per-user activity timeline (admin) ──
+export interface UserActivityEvent {
+  type: string;
+  label: string | null; // null → frontend maps `type` to a friendly label
+  detail: string | null;
+  actor: string | null; // admin who performed an action ON this user, if any
+  at: string | null;
+}
+export interface UserActivity {
+  footprint: { chats: number; api_keys: number; memory_facts: number; shared_chats: number };
+  events: UserActivityEvent[];
+}
+
+export async function adminUserActivity(userId: number): Promise<UserActivity> {
+  const res = await client.get<UserActivity>(`/admin/users/${userId}/activity`);
   return res.data;
 }
 
