@@ -1243,7 +1243,7 @@ function BroadcastTab() {
           <button
             onClick={requestPublish}
             disabled={posting || !message.trim()}
-            className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-1.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
+            className="btn-3d ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg text-white px-4 py-1.5 disabled:opacity-50"
           >
             {posting ? 'Publishing…' : emailUsers ? 'Publish & email' : 'Publish'}
           </button>
