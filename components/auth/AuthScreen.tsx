@@ -243,7 +243,7 @@ export function AuthScreen() {
   };
 
   const btn =
-    'btn-shine btn-3d w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed';
+    'btn-shine w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-strong)] hover:shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--accent)_65%,transparent)] hover:-translate-y-px transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed';
   const linkCls = 'text-[var(--accent-fg)] font-medium hover:underline';
   const codeInput = (
     <Field

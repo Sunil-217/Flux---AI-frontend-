@@ -50,7 +50,7 @@ export function PromptModal({
   if (typeof document === 'undefined') return null;
   return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label={title} className="animate-modal-in relative w-full max-w-sm rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl p-5">
         <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
         {label && <label className="block text-xs text-[var(--ink-3)] mt-1 mb-2">{label}</label>}
@@ -126,7 +126,7 @@ export function ConfirmModal({
   if (typeof document === 'undefined') return null;
   return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div role="alertdialog" aria-modal="true" aria-label={title} className="animate-modal-in relative w-full max-w-sm rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl p-5">
         <h2 className="text-base font-semibold text-[var(--ink)]">{title}</h2>
         <p className="text-sm text-[var(--ink-2)] mt-2 leading-relaxed">{message}</p>

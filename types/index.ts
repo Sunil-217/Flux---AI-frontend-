@@ -80,4 +80,5 @@ export interface User {
   email: string;
   phone?: string;
   is_admin?: boolean; // platform admin — can open the /admin control panel
+  avatar?: string | null; // uploaded photo (data URL) or "preset:<id>"; null = monogram
 }

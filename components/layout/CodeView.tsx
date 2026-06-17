@@ -764,7 +764,7 @@ export function CodeView({
                   Each code chat has its own folder + memory (like Claude Code). The agent plans, edits,
                   and you accept the diffs. Terminal commands aren&apos;t available in a browser.
                 </p>
-                <button onClick={openFolder} disabled={loadingFolder} className="btn-3d inline-flex items-center gap-2 text-sm font-medium rounded-lg text-white px-5 py-2.5 disabled:opacity-50">
+                <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
                   {loadingFolder ? 'Reading…' : 'Open folder'}
                 </button>

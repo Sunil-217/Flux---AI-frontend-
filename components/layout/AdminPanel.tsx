@@ -1243,7 +1243,7 @@ function BroadcastTab() {
           <button
             onClick={requestPublish}
             disabled={posting || !message.trim()}
-            className="btn-3d ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg text-white px-4 py-1.5 disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-1.5 hover:bg-[var(--accent-strong)] transition-colors disabled:opacity-50"
           >
             {posting ? 'Publishing…' : emailUsers ? 'Publish & email' : 'Publish'}
           </button>
@@ -1860,7 +1860,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
         </nav>
 
         {/* Content — fills the full page width (no max-width cap) */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7">
+        <div key={tab} className="animate-fade-in flex-1 min-w-0 overflow-y-auto scroll-smooth px-5 md:px-8 py-6 md:py-7">
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
           {tab === 'broadcast' && <BroadcastTab />}

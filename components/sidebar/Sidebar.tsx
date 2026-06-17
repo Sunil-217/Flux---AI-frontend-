@@ -7,6 +7,7 @@ import { Logo } from '@/components/layout/Logo';
 import { SettingsModal } from '@/components/layout/SettingsModal';
 import { AdminPanel } from '@/components/layout/AdminPanel';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { UserAvatar } from '@/components/layout/UserAvatar';
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import type { ChatSession, Folder, CodeSession } from '@/types';
 
@@ -561,9 +562,7 @@ export function Sidebar({
       {/* User + sign out */}
       <div className="border-t border-[var(--line)] p-3 mt-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-            {user?.name?.[0]?.toUpperCase() ?? 'U'}
-          </div>
+          <UserAvatar avatar={user?.avatar} name={user?.name} size={32} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-[var(--ink)] truncate">{user?.name}</p>
             <p className="text-[11px] text-[var(--ink-4)] truncate">{user?.email}</p>

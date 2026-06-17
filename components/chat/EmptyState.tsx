@@ -203,7 +203,7 @@ export function EmptyState({
         {!hasSession && (
           <button
             onClick={onNewChat}
-            className="btn-3d px-6 py-3 text-sm font-semibold text-white rounded-xl"
+            className="px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent-strong)] text-sm font-semibold text-white rounded-xl transition-colors active:scale-[0.98] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
           >
             Start a new chat
           </button>

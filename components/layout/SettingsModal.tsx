@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -23,6 +23,7 @@ import type { ChatSession } from '@/types';
 import { useT, getLang, setLang, type Lang } from '@/lib/i18n';
 import { ConfirmModal } from '@/components/layout/Dialogs';
 import { Logo } from '@/components/layout/Logo';
+import { UserAvatar, AVATAR_PRESETS } from '@/components/layout/UserAvatar';
 import {
   ACCENTS,
   applyAccent,
@@ -85,6 +86,34 @@ function setHtmlTheme(theme: 'light' | 'dark') {
   }
 }
 
+// Resize a chosen image to a 256px square JPEG data URL — small enough to store
+// on the account, center-cropped ("cover").
+function fileToAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        const SIZE = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('no canvas'));
+        const scale = Math.max(SIZE / img.width, SIZE / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // Static row (label + description on the left, control on the right). Module-level
 // so it never remounts — important so inputs elsewhere keep focus.
 function Row({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
@@ -96,6 +125,94 @@ function Row({ title, desc, children }: { title: string; desc?: string; children
       </div>
       <div className="flex-shrink-0">{children}</div>
     </div>
+  );
+}
+
+// Password input with a show/hide eye toggle. Module-level so it never remounts
+// (the input keeps focus while typing).
+function PasswordField({
+  value,
+  onChange,
+  show,
+  onToggle,
+  placeholder,
+  autoComplete,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggle: () => void;
+  placeholder?: string;
+  autoComplete?: string;
+}) {
+  return (
+    <div className="relative max-w-sm">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete ?? 'off'}
+        className={`${inputCls} pr-10`}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={show ? 'Hide password' : 'Show password'}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-md text-[var(--ink-4)] hover:text-[var(--ink-2)] transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          {show ? (
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 4.24A9 9 0 0112 4c5 0 9 4.5 9 8a11.8 11.8 0 01-2.2 3.36M6.1 6.1A11.8 11.8 0 003 12c0 3.5 4 8 9 8a8.9 8.9 0 003.9-.9" />
+          ) : (
+            <>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </>
+          )}
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// Password strength → 0 (weak) … 3 (strong), with a label + bar colour.
+function pwStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: -1, label: '', color: 'var(--ink-4)' };
+  let s = 0;
+  if (pw.length >= 8) s += 1;
+  if (pw.length >= 12) s += 1;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s += 1;
+  if (/\d/.test(pw)) s += 1;
+  if (/[^A-Za-z0-9]/.test(pw)) s += 1;
+  const level = s <= 1 ? 0 : s === 2 ? 1 : s === 3 ? 2 : 3;
+  return [
+    { score: 0, label: 'Weak', color: '#f87171' },
+    { score: 1, label: 'Fair', color: '#fbbf24' },
+    { score: 2, label: 'Good', color: '#60a5fa' },
+    { score: 3, label: 'Strong', color: '#34d399' },
+  ][level];
+}
+
+// A small ✓ / ○ password-requirement marker.
+function ReqItem({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+  return (
+    <li className="flex items-center gap-2 text-[11px]">
+      <svg
+        className={`w-3.5 h-3.5 flex-shrink-0 ${ok ? 'text-emerald-400' : 'text-[var(--ink-4)]'}`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.2}
+        viewBox="0 0 24 24"
+      >
+        {ok ? (
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        ) : (
+          <circle cx="12" cy="12" r="8" />
+        )}
+      </svg>
+      <span className={ok ? 'text-[var(--ink-3)]' : 'text-[var(--ink-4)]'}>{children}</span>
+    </li>
   );
 }
 
@@ -809,9 +926,14 @@ export function SettingsModal({
   const [tab, setTab] = useState<Tab>('account');
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
+  const [avatar, setAvatar] = useState(user?.avatar ?? '');
+  const fileRef = useRef<HTMLInputElement>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [showCur, setShowCur] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(
     typeof document !== 'undefined' && document.documentElement.classList.contains('light')
@@ -876,23 +998,54 @@ export function SettingsModal({
     setLangState(l);
   };
 
-  const profileChanged = name.trim() !== (user?.name ?? '') || phone.trim() !== (user?.phone ?? '');
+  const profileChanged =
+    name.trim() !== (user?.name ?? '') ||
+    phone.trim() !== (user?.phone ?? '') ||
+    (avatar ?? '') !== (user?.avatar ?? '');
 
   const saveProfile = () => {
     if (!name.trim() || !profileChanged) return;
     setSavingProfile(true);
-    updateProfile(name.trim(), phone.trim())
+    updateProfile(name.trim(), phone.trim(), avatar)
       .then((u) => {
         updateUser(u);
+        setAvatar(u.avatar ?? '');
         toast.success('Profile updated');
       })
       .catch((e) => toast.error(apiError(e, 'Could not update profile.')))
       .finally(() => setSavingProfile(false));
   };
 
+  const onAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image is too large (max 8MB).');
+      return;
+    }
+    try {
+      setAvatar(await fileToAvatar(file));
+    } catch {
+      toast.error('Could not process that image.');
+    }
+  };
+
   const savePw = () => {
     if (!cur || next.length < 8) {
       toast.error('New password must be at least 8 characters.');
+      return;
+    }
+    if (next !== confirmPw) {
+      toast.error('New passwords do not match.');
+      return;
+    }
+    if (next === cur) {
+      toast.error('New password must be different from your current one.');
       return;
     }
     setSavingPw(true);
@@ -901,6 +1054,7 @@ export function SettingsModal({
         toast.success('Password updated');
         setCur('');
         setNext('');
+        setConfirmPw('');
       })
       .catch((e) => toast.error(apiError(e, 'Could not change password.')))
       .finally(() => setSavingPw(false));
@@ -1059,6 +1213,9 @@ export function SettingsModal({
 
   if (typeof document === 'undefined') return null;
 
+  const strength = pwStrength(next);
+  const pwMismatch = confirmPw.length > 0 && confirmPw !== next;
+
   // Tabs that are tied to an admin-toggleable feature; hidden when it's off.
   const FEATURE_FOR_TAB: Partial<Record<Tab, FeatureKey>> = {
     api: 'api_keys',
@@ -1089,7 +1246,7 @@ export function SettingsModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="animate-modal-in relative w-full max-w-4xl h-[640px] max-h-[92vh] flex flex-col rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--line)]">
@@ -1125,46 +1282,124 @@ export function SettingsModal({
           </nav>
 
           {/* Right content */}
-          <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7">
+          <div key={tab} className="animate-fade-in flex-1 min-w-0 overflow-y-auto scroll-smooth px-5 md:px-8 py-6 md:py-7">
             {tab === 'account' && (
               <>
                 <div className="mb-5">
                   <h3 className={headingCls}>Account</h3>
                   <p className={subCls}>Manage your profile details.</p>
                 </div>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] flex items-center justify-center text-white text-lg font-semibold flex-shrink-0">
-                    {user?.name?.[0]?.toUpperCase() ?? 'U'}
+                {/* Profile header card — avatar + photo upload + colour presets */}
+                <div className="p-4 mb-6 rounded-2xl border border-[var(--line)] bg-[var(--fill)]">
+                  <div className="flex items-center gap-4">
+                    <UserAvatar
+                      avatar={avatar}
+                      name={user?.name}
+                      size={72}
+                      className="shadow-[0_6px_16px_-6px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-base font-semibold text-[var(--ink)] truncate">{user?.name}</p>
+                        {user?.is_admin && (
+                          <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent-fg)] bg-[var(--accent)]/12 border border-[var(--accent)]/30 rounded-full px-2 py-0.5">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[var(--ink-3)] truncate mt-0.5">{user?.email}</p>
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <button
+                          onClick={() => fileRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg border border-[var(--line)] text-[var(--ink-2)] px-3 py-1.5 hover:bg-[var(--fill-strong)] hover:text-[var(--ink)] transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
+                          </svg>
+                          Upload photo
+                        </button>
+                        {avatar && (
+                          <button
+                            onClick={() => setAvatar('')}
+                            className="text-xs font-medium text-[var(--ink-4)] hover:text-red-400 px-2 py-1.5 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[var(--ink)] truncate">{user?.name}</p>
-                    <p className="text-xs text-[var(--ink-4)] truncate">{user?.email}</p>
+
+                  {/* Superhero avatars */}
+                  <div className="mt-4 pt-4 border-t border-[var(--line)]">
+                    <p className="text-[11px] text-[var(--ink-4)] mb-2">Or pick a superhero</p>
+                    <div className="flex flex-wrap gap-2">
+                      {AVATAR_PRESETS.map((p, i) => {
+                        const val = `preset:${i}`;
+                        const active = avatar === val;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => setAvatar(val)}
+                            aria-label={`Superhero avatar ${i + 1}`}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${
+                              active ? 'ring-2 ring-offset-2 ring-offset-[var(--fill)] ring-[var(--ink-2)]' : ''
+                            }`}
+                            style={{ background: p.bg }}
+                          >
+                            <span style={{ fontSize: 18, lineHeight: 1 }}>{p.emoji}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onAvatarFile} />
+                </div>
+
+                {/* Editable fields */}
+                <div className="space-y-4 max-w-sm">
+                  <div>
+                    <label className={fieldLabel}>Display name</label>
+                    <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={fieldLabel}>Phone number</label>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Add a phone number"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={fieldLabel}>Email address</label>
+                    <div className="relative max-w-sm">
+                      <input
+                        value={user?.email ?? ''}
+                        readOnly
+                        disabled
+                        className={`${inputCls} pr-10 opacity-70 cursor-not-allowed`}
+                      />
+                      <svg
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ink-4)]"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        viewBox="0 0 24 24"
+                      >
+                        <rect x="5" y="11" width="14" height="9" rx="2" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V8a4 4 0 118 0v3" />
+                      </svg>
+                    </div>
+                    <p className="text-[11px] text-[var(--ink-4)] mt-1.5">Used to sign in — can&apos;t be changed.</p>
                   </div>
                 </div>
-                <label className={fieldLabel}>Display name</label>
-                <input value={name} onChange={(e) => setName(e.target.value)} className={`${inputCls} mb-4`} />
-                <label className={fieldLabel}>Phone number</label>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Add a phone number"
-                  className={`${inputCls} mb-5`}
-                />
-                <div className="flex justify-end max-w-sm">
+
+                <div className="flex max-w-sm mt-6">
                   <button onClick={saveProfile} disabled={savingProfile || !name.trim() || !profileChanged} className={btnCls}>
                     {savingProfile ? 'Saving…' : 'Save changes'}
                   </button>
-                </div>
-                <div className="mt-8 pt-5 border-t border-[var(--line)]">
-                  <button
-                    onClick={() => setConfirmClear(true)}
-                    className="text-sm font-medium text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    Clear all conversations
-                  </button>
-                  <p className="text-xs text-[var(--ink-4)] mt-1">
-                    Permanently removes every chat. This can&apos;t be undone.
-                  </p>
                 </div>
               </>
             )}
@@ -1448,26 +1683,78 @@ export function SettingsModal({
               <>
                 <div className="mb-5">
                   <h3 className={headingCls}>Security</h3>
-                  <p className={subCls}>Update your account password.</p>
+                  <p className={subCls}>Change your password. Pick a strong one you don&apos;t use elsewhere.</p>
                 </div>
-                <label className={fieldLabel}>Current password</label>
-                <input
-                  type="password"
-                  value={cur}
-                  onChange={(e) => setCur(e.target.value)}
-                  placeholder="••••••••"
-                  className={`${inputCls} mb-4`}
-                />
-                <label className={fieldLabel}>New password</label>
-                <input
-                  type="password"
-                  value={next}
-                  onChange={(e) => setNext(e.target.value)}
-                  placeholder="At least 8 characters"
-                  className={`${inputCls} mb-5`}
-                />
-                <div className="flex justify-end max-w-sm">
-                  <button onClick={savePw} disabled={savingPw || !cur || next.length < 8} className={btnCls}>
+
+                <div className="space-y-4 max-w-sm">
+                  <div>
+                    <label className={fieldLabel}>Current password</label>
+                    <PasswordField
+                      value={cur}
+                      onChange={setCur}
+                      show={showCur}
+                      onToggle={() => setShowCur((v) => !v)}
+                      placeholder="Enter current password"
+                      autoComplete="current-password"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={fieldLabel}>New password</label>
+                    <PasswordField
+                      value={next}
+                      onChange={setNext}
+                      show={showNew}
+                      onToggle={() => setShowNew((v) => !v)}
+                      placeholder="At least 8 characters"
+                      autoComplete="new-password"
+                    />
+                    {next.length > 0 && (
+                      <div className="max-w-sm mt-2">
+                        <div className="flex gap-1">
+                          {[0, 1, 2, 3].map((i) => (
+                            <span
+                              key={i}
+                              className="h-1 flex-1 rounded-full transition-colors"
+                              style={{ background: i <= strength.score ? strength.color : 'var(--fill-strong)' }}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-[11px] mt-1" style={{ color: strength.color }}>
+                          {strength.label} password
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className={fieldLabel}>Confirm new password</label>
+                    <PasswordField
+                      value={confirmPw}
+                      onChange={setConfirmPw}
+                      show={showNew}
+                      onToggle={() => setShowNew((v) => !v)}
+                      placeholder="Re-enter new password"
+                      autoComplete="new-password"
+                    />
+                    {pwMismatch && (
+                      <p className="text-[11px] text-red-400 mt-1.5">Passwords don&apos;t match.</p>
+                    )}
+                  </div>
+                </div>
+
+                <ul className="mt-4 space-y-1.5 max-w-sm">
+                  <ReqItem ok={next.length >= 8}>At least 8 characters</ReqItem>
+                  <ReqItem ok={next.length > 0 && next !== cur}>Different from your current password</ReqItem>
+                  <ReqItem ok={confirmPw.length > 0 && next === confirmPw}>Both new passwords match</ReqItem>
+                </ul>
+
+                <div className="flex max-w-sm mt-6">
+                  <button
+                    onClick={savePw}
+                    disabled={savingPw || !cur || next.length < 8 || next !== confirmPw || next === cur}
+                    className={btnCls}
+                  >
                     {savingPw ? 'Updating…' : 'Update password'}
                   </button>
                 </div>

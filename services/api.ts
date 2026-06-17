@@ -96,8 +96,12 @@ export async function getMe(): Promise<User> {
   return res.data;
 }
 
-export async function updateProfile(name: string, phone?: string): Promise<User> {
-  const res = await client.post<User>('/auth/profile', { name, phone });
+export async function updateProfile(
+  name: string,
+  phone?: string,
+  avatar?: string | null,
+): Promise<User> {
+  const res = await client.post<User>('/auth/profile', { name, phone, avatar });
   return res.data;
 }
 
