@@ -1024,14 +1024,17 @@ export function SettingsModal({
       toast.error('Please choose an image file.');
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error('Image is too large (max 8MB).');
+    // Generous cap: we downscale to 256px ourselves, so the raw size barely
+    // matters — this only guards against absurd files. (A typical phone photo
+    // is 2-12MB and must NOT be rejected here.)
+    if (file.size > 40 * 1024 * 1024) {
+      toast.error('Image is too large (max 40MB).');
       return;
     }
     try {
       setAvatar(await fileToAvatar(file));
     } catch {
-      toast.error('Could not process that image.');
+      toast.error("Couldn't read that image — try a JPG, PNG, or WebP.");
     }
   };
 
@@ -1354,7 +1357,7 @@ export function SettingsModal({
                     </div>
                   </div>
 
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onAvatarFile} />
+                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onAvatarFile} />
                 </div>
 
                 {/* Editable fields */}
