@@ -917,3 +917,91 @@ export async function adminTestWebhook(id: number): Promise<string> {
   const res = await client.post<{ ok: boolean; last_status: string | null }>(`/admin/webhooks/${id}/test`);
   return res.data.last_status ?? 'unknown';
 }
+
+// ── Business tenant API (B2B RAG) ─────────────────────────────────────────────
+
+export interface BusinessTenantRow {
+  id: number;
+  business_name: string;
+  api_key_prefix: string;
+  doc_count: number;
+  chat_count: number;
+  revoked: boolean;
+  created_at: string | null;
+}
+
+export interface BusinessDocumentRow {
+  id: number;
+  filename: string;
+  file_size: number;
+  chunk_count: number;
+  uploaded_at: string | null;
+}
+
+export interface BusinessMe {
+  id: number;
+  business_name: string;
+  doc_count: number;
+  chat_count: number;
+  documents: BusinessDocumentRow[];
+}
+
+export async function adminCreateBusinessTenant(
+  name: string
+): Promise<BusinessTenantRow & { api_key: string; warning: string }> {
+  const res = await client.post<BusinessTenantRow & { api_key: string; warning: string }>(
+    '/admin/business',
+    { business_name: name }
+  );
+  return res.data;
+}
+
+export async function adminListBusinessTenants(): Promise<BusinessTenantRow[]> {
+  const res = await client.get<BusinessTenantRow[]>('/admin/business');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function adminRevokeBusiness(id: number): Promise<void> {
+  await client.delete(`/admin/business/${id}`);
+}
+
+/** Business portal calls — authenticated via the raw bk_... key, not a JWT. */
+function bizHeaders(key: string) {
+  return { headers: { 'X-Business-Key': key } };
+}
+
+export async function businessGetMe(key: string): Promise<BusinessMe> {
+  const res = await client.get<BusinessMe>('/business/me', bizHeaders(key));
+  return res.data;
+}
+
+export async function businessUploadDocument(
+  key: string,
+  file: File
+): Promise<{ id: number; filename: string; chunk_count: number; message: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await client.post<{ id: number; filename: string; chunk_count: number; message: string }>(
+    '/business/documents',
+    form,
+    bizHeaders(key)
+  );
+  return res.data;
+}
+
+export async function businessDeleteDocument(key: string, docId: number): Promise<void> {
+  await client.delete(`/business/documents/${docId}`, bizHeaders(key));
+}
+
+export async function businessChat(
+  key: string,
+  question: string,
+  history: { role: string; content: string }[]
+): Promise<{ answer: string; sources: { content: string; filename: string }[] }> {
+  const res = await client.post<{ answer: string; sources: { content: string; filename: string }[] }>(
+    '/business/chat',
+    { question, history },
+    bizHeaders(key)
+  );
+  return res.data;
+}
