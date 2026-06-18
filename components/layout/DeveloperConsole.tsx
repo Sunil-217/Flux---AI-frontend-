@@ -346,6 +346,7 @@ function IntegrationTab({ kb }: { kb: KbInfo }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
   const embedUrl = `${origin}/embed/chat?app=${kb.widget_token}`;
+  const scriptCode = `<!-- Paste before </body> on every page -->\n<script\n  src="${origin}/widget.js"\n  data-token="${kb.widget_token}"\n  async\n></script>`;
   const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="400"\n  height="600"\n  frameborder="0"\n  style="border:none;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.3)"\n></iframe>`;
   const jsCode = `const res = await fetch("${apiBase}/v1/rag/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-Widget-Token": "${kb.widget_token}"\n  },\n  body: JSON.stringify({ question: "What are your hours?", history: [] })\n});\nconst { answer, sources } = await res.json();`;
 
@@ -360,12 +361,23 @@ function IntegrationTab({ kb }: { kb: KbInfo }) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-[var(--ink)]">1 · Embed the chat widget</p>
-          <CodeWindow filename="index.html" code={iframeCode} />
+          <p className="text-xs font-semibold text-[var(--ink)] flex items-center gap-2">
+            1 · Add the chat bubble to your site
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-fg)] bg-[var(--accent)]/12 rounded-full px-1.5 py-0.5">Recommended</span>
+          </p>
+          <p className="text-[11px] text-[var(--ink-4)]">
+            One line, anywhere on your site. A floating button appears bottom-right and opens the assistant — like Intercom.
+          </p>
+          <CodeWindow filename="index.html" code={scriptCode} />
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-[var(--ink)]">2 · Or call the API directly</p>
+          <p className="text-xs font-semibold text-[var(--ink)]">2 · Or embed it inline (fixed spot)</p>
+          <CodeWindow filename="page.html" code={iframeCode} />
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-[var(--ink)]">3 · Or call the API directly</p>
           <CodeWindow filename="chat.js" code={jsCode} />
         </div>
       </div>
