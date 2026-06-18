@@ -342,13 +342,156 @@ function CodeWindow({ code, filename }: { code: string; filename: string }) {
   );
 }
 
+// Code snippets for calling POST /v1/rag/chat from every common language.
+const RAG_LANGS: { id: string; label: string; file: string; build: (b: string, t: string) => string }[] = [
+  {
+    id: 'curl', label: 'cURL', file: 'request.sh',
+    build: (b, t) => `curl -X POST ${b}/v1/rag/chat \\
+  -H "Content-Type: application/json" \\
+  -H "X-Widget-Token: ${t}" \\
+  -d '{"question":"What are your hours?","history":[]}'`,
+  },
+  {
+    id: 'javascript', label: 'JavaScript', file: 'chat.js',
+    build: (b, t) => `const res = await fetch("${b}/v1/rag/chat", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Widget-Token": "${t}"
+  },
+  body: JSON.stringify({ question: "What are your hours?", history: [] })
+});
+const { answer, sources } = await res.json();
+console.log(answer);`,
+  },
+  {
+    id: 'python', label: 'Python', file: 'chat.py',
+    build: (b, t) => `import requests
+
+res = requests.post(
+    "${b}/v1/rag/chat",
+    headers={"X-Widget-Token": "${t}"},
+    json={"question": "What are your hours?", "history": []},
+)
+print(res.json()["answer"])`,
+  },
+  {
+    id: 'php', label: 'PHP', file: 'chat.php',
+    build: (b, t) => `<?php
+$ch = curl_init("${b}/v1/rag/chat");
+curl_setopt_array($ch, [
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => [
+    "Content-Type: application/json",
+    "X-Widget-Token: ${t}",
+  ],
+  CURLOPT_POSTFIELDS => json_encode([
+    "question" => "What are your hours?",
+    "history" => [],
+  ]),
+]);
+$data = json_decode(curl_exec($ch), true);
+echo $data["answer"];`,
+  },
+  {
+    id: 'ruby', label: 'Ruby', file: 'chat.rb',
+    build: (b, t) => `require "net/http"
+require "json"
+
+uri = URI("${b}/v1/rag/chat")
+res = Net::HTTP.post(uri,
+  { question: "What are your hours?", history: [] }.to_json,
+  "Content-Type" => "application/json",
+  "X-Widget-Token" => "${t}")
+puts JSON.parse(res.body)["answer"]`,
+  },
+  {
+    id: 'go', label: 'Go', file: 'main.go',
+    build: (b, t) => `package main
+
+import (
+\t"bytes"
+\t"encoding/json"
+\t"fmt"
+\t"net/http"
+)
+
+func main() {
+\tbody, _ := json.Marshal(map[string]any{
+\t\t"question": "What are your hours?",
+\t\t"history":  []any{},
+\t})
+\treq, _ := http.NewRequest("POST", "${b}/v1/rag/chat", bytes.NewBuffer(body))
+\treq.Header.Set("Content-Type", "application/json")
+\treq.Header.Set("X-Widget-Token", "${t}")
+\tres, _ := http.DefaultClient.Do(req)
+\tdefer res.Body.Close()
+\tvar out map[string]any
+\tjson.NewDecoder(res.Body).Decode(&out)
+\tfmt.Println(out["answer"])
+}`,
+  },
+  {
+    id: 'java', label: 'Java', file: 'Chat.java',
+    build: (b, t) => `var client = java.net.http.HttpClient.newHttpClient();
+var req = java.net.http.HttpRequest.newBuilder()
+    .uri(java.net.URI.create("${b}/v1/rag/chat"))
+    .header("Content-Type", "application/json")
+    .header("X-Widget-Token", "${t}")
+    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+        "{\\"question\\":\\"What are your hours?\\",\\"history\\":[]}"))
+    .build();
+var res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+System.out.println(res.body());`,
+  },
+  {
+    id: 'csharp', label: 'C#', file: 'Chat.cs',
+    build: (b, t) => `using System.Net.Http;
+using System.Text;
+
+var client = new HttpClient();
+var req = new HttpRequestMessage(HttpMethod.Post, "${b}/v1/rag/chat");
+req.Headers.Add("X-Widget-Token", "${t}");
+req.Content = new StringContent(
+    "{\\"question\\":\\"What are your hours?\\",\\"history\\":[]}",
+    Encoding.UTF8, "application/json");
+var res = await client.SendAsync(req);
+Console.WriteLine(await res.Content.ReadAsStringAsync());`,
+  },
+];
+
+function MultiLangCode({ apiBase, token }: { apiBase: string; token: string }) {
+  const [lang, setLang] = useState('curl');
+  const active = RAG_LANGS.find((l) => l.id === lang) || RAG_LANGS[0];
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1">
+        {RAG_LANGS.map((l) => (
+          <button
+            key={l.id}
+            onClick={() => setLang(l.id)}
+            className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+              lang === l.id
+                ? 'bg-[var(--fill-strong)] text-[var(--ink)]'
+                : 'text-[var(--ink-3)] hover:text-[var(--ink-2)] hover:bg-[var(--fill)]'
+            }`}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <CodeWindow filename={active.file} code={active.build(apiBase, token)} />
+    </div>
+  );
+}
+
 function IntegrationTab({ kb }: { kb: KbInfo }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
   const embedUrl = `${origin}/embed/chat?app=${kb.widget_token}`;
   const scriptCode = `<!-- Paste before </body> on every page -->\n<script\n  src="${origin}/widget.js"\n  data-token="${kb.widget_token}"\n  async\n></script>`;
   const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="400"\n  height="600"\n  frameborder="0"\n  style="border:none;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.3)"\n></iframe>`;
-  const jsCode = `const res = await fetch("${apiBase}/v1/rag/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-Widget-Token": "${kb.widget_token}"\n  },\n  body: JSON.stringify({ question: "What are your hours?", history: [] })\n});\nconst { answer, sources } = await res.json();`;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
@@ -378,7 +521,8 @@ function IntegrationTab({ kb }: { kb: KbInfo }) {
 
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-[var(--ink)]">3 · Or call the API directly</p>
-          <CodeWindow filename="chat.js" code={jsCode} />
+          <p className="text-[11px] text-[var(--ink-4)]">Pick your language and copy — same request, any stack.</p>
+          <MultiLangCode apiBase={apiBase} token={kb.widget_token} />
         </div>
       </div>
 

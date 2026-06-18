@@ -230,6 +230,7 @@ function ApiKeysPanel() {
   const [freshKey, setFreshKey] = useState<string | null>(null); // shown ONCE
   const [revokeId, setRevokeId] = useState<number | null>(null);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [qsLang, setQsLang] = useState('python');
 
   const refresh = () =>
     listApiKeys()
@@ -264,7 +265,10 @@ function ApiKeysPanel() {
   };
 
   const active = keys.filter((k) => !k.revoked);
-  const pythonSnippet = `from openai import OpenAI
+  const QS_SNIPPETS: { id: string; label: string; code: string }[] = [
+    {
+      id: 'python', label: 'Python',
+      code: `from openai import OpenAI
 
 client = OpenAI(
     base_url="${PUBLIC_API_BASE}/v1",
@@ -274,7 +278,34 @@ r = client.chat.completions.create(
     model="close-chat",  # or "close-code"
     messages=[{"role": "user", "content": "Hello!"}],
 )
-print(r.choices[0].message.content)`;
+print(r.choices[0].message.content)`,
+    },
+    {
+      id: 'javascript', label: 'JavaScript',
+      code: `import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "${PUBLIC_API_BASE}/v1",
+  apiKey: "ck_...", // your key
+});
+const r = await client.chat.completions.create({
+  model: "close-chat", // or "close-code"
+  messages: [{ role: "user", content: "Hello!" }],
+});
+console.log(r.choices[0].message.content);`,
+    },
+    {
+      id: 'curl', label: 'cURL',
+      code: `curl ${PUBLIC_API_BASE}/v1/chat/completions \\
+  -H "Authorization: Bearer ck_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "close-chat",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`,
+    },
+  ];
+  const qsActive = QS_SNIPPETS.find((s) => s.id === qsLang) || QS_SNIPPETS[0];
 
   return (
     <>
@@ -381,13 +412,30 @@ print(r.choices[0].message.content)`;
 
       {/* Quick start */}
       <div className="pt-4 border-t border-[var(--line)]">
-        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Quick start (Python, OpenAI SDK)</p>
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <p className="text-xs font-semibold text-[var(--ink)]">Quick start (OpenAI-compatible)</p>
+          <div className="flex flex-wrap gap-1">
+            {QS_SNIPPETS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setQsLang(s.id)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+                  qsLang === s.id
+                    ? 'bg-[var(--fill-strong)] text-[var(--ink)]'
+                    : 'text-[var(--ink-3)] hover:text-[var(--ink-2)] hover:bg-[var(--fill)]'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="relative">
           <pre className="text-[11px] font-mono text-[var(--ink-2)] bg-[var(--base)] border border-[var(--line)] rounded-xl p-3 overflow-x-auto whitespace-pre">
-            {pythonSnippet}
+            {qsActive.code}
           </pre>
           <button
-            onClick={() => copy(pythonSnippet)}
+            onClick={() => copy(qsActive.code)}
             className="absolute top-2 right-2 text-[10px] font-medium rounded-md border border-[var(--line)] bg-[var(--fill)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)]"
           >
             Copy
@@ -395,8 +443,7 @@ print(r.choices[0].message.content)`;
         </div>
         <p className="text-[11px] text-[var(--ink-4)] mt-2">
           Models: <code className="font-mono">close-chat</code> (fast general chat) ·{' '}
-          <code className="font-mono">close-code</code> (strongest coder). Streaming is supported
-          (<code className="font-mono">stream=True</code>).
+          <code className="font-mono">close-code</code> (strongest coder). Streaming is supported.
         </p>
       </div>
 
