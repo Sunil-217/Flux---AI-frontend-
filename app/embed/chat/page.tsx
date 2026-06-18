@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { businessChat, apiError } from '@/services/api';
+import { ragChat, apiError } from '@/services/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,7 +12,8 @@ interface Message {
 
 function EmbedChatInner() {
   const params = useSearchParams();
-  const apiKey = params.get('key') ?? '';
+  // `app` is the public widget token (wk_...). `key` kept as a fallback alias.
+  const widgetToken = params.get('app') ?? params.get('key') ?? '';
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,34 +27,30 @@ function EmbedChatInner() {
 
   const send = useCallback(async () => {
     const q = input.trim();
-    if (!q || loading || !apiKey) return;
+    if (!q || loading || !widgetToken) return;
     setInput('');
     setError('');
 
-    const userMsg: Message = { role: 'user', content: q };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { role: 'user', content: q }]);
     setLoading(true);
 
-    const history = messages
-      .slice(-10)
-      .map((m) => ({ role: m.role, content: m.content }));
+    const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
     try {
-      const res = await businessChat(apiKey, q, history);
+      const res = await ragChat(widgetToken, q, history);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: res.answer, sources: res.sources },
       ]);
     } catch (e: unknown) {
-      const msg = apiError(e, 'Failed to get a response.');
-      setError(msg);
+      setError(apiError(e, 'Failed to get a response.'));
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: `Sorry, something went wrong. Please try again.` },
+        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
       ]);
     }
     setLoading(false);
-  }, [input, loading, apiKey, messages]);
+  }, [input, loading, widgetToken, messages]);
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -62,10 +59,10 @@ function EmbedChatInner() {
     }
   }
 
-  if (!apiKey) {
+  if (!widgetToken) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#0a0a0b] text-neutral-500 text-sm px-4 text-center">
-        No API key provided. Add <code className="text-neutral-400 mx-1">?key=bk_...</code> to the URL.
+        No app token provided. Add <code className="text-neutral-400 mx-1">?app=wk_...</code> to the URL.
       </div>
     );
   }
@@ -106,11 +103,11 @@ function EmbedChatInner() {
             >
               <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</p>
               {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-white/8 space-y-1">
-                  {[...new Set(msg.sources.map((s) => s.filename))].map((fname) => (
+                <div className="mt-2 pt-2 border-t border-white/8 space-x-1">
+                  {[...new Set(msg.sources.map((s) => s.filename).filter(Boolean))].map((fname) => (
                     <span
                       key={fname}
-                      className="inline-flex items-center gap-1 text-[10px] text-neutral-500 bg-white/4 rounded-md px-1.5 py-0.5 mr-1"
+                      className="inline-flex items-center gap-1 text-[10px] text-neutral-500 bg-white/4 rounded-md px-1.5 py-0.5"
                     >
                       <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

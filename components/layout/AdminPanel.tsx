@@ -32,9 +32,6 @@ import {
   adminUpdateWebhook,
   adminDeleteWebhook,
   adminTestWebhook,
-  adminCreateBusinessTenant,
-  adminListBusinessTenants,
-  adminRevokeBusiness,
   apiError,
   type AdminStats,
   type AdminUser,
@@ -45,12 +42,11 @@ import {
   type AdminInvite,
   type AdminWebhook,
   type FeatureMap,
-  type BusinessTenantRow,
 } from '@/services/api';
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit' | 'business';
+type Tab = 'dashboard' | 'users' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -1762,171 +1758,6 @@ function WebhooksTab() {
   );
 }
 
-// ── Business API tab ──────────────────────────────────────────────────────────
-function BusinessApiTab() {
-  const [tenants, setTenants] = useState<BusinessTenantRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newKey, setNewKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const frontendUrl = typeof window !== 'undefined' ? window.location.origin : '';
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setTenants(await adminListBusinessTenants()); } catch {}
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleCreate() {
-    const name = newName.trim();
-    if (!name) return;
-    setCreating(true);
-    try {
-      const res = await adminCreateBusinessTenant(name);
-      setNewKey(res.api_key);
-      setNewName('');
-      await load();
-    } catch (e) {
-      toast.error(apiError(e, 'Failed to create tenant.'));
-    }
-    setCreating(false);
-  }
-
-  async function handleRevoke(id: number, bname: string) {
-    if (!confirm(`Revoke access for "${bname}"? Their API key will stop working.`)) return;
-    try {
-      await adminRevokeBusiness(id);
-      toast.success('Tenant revoked.');
-      load();
-    } catch (e) {
-      toast.error(apiError(e, 'Failed to revoke.'));
-    }
-  }
-
-  function copyKey() {
-    if (!newKey) return;
-    navigator.clipboard.writeText(newKey).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  return (
-    <div className="max-w-3xl space-y-7">
-      <div>
-        <h2 className={headingCls}>Business API — B2B RAG</h2>
-        <p className={subCls}>
-          Create a key for a business → they upload their docs at <code className="text-[10px] bg-[var(--fill-strong)] px-1 py-0.5 rounded">/portal</code> →
-          embed the chat widget on their site.
-        </p>
-      </div>
-
-      {/* Create */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-5 space-y-3">
-        <p className="text-sm font-medium text-[var(--ink)]">Create new tenant</p>
-        <div className="flex gap-2">
-          <input
-            className="flex-1 rounded-xl border border-[var(--line)] bg-[var(--base)] px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-            placeholder="Business name (e.g. Acme Corp)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          />
-          <button
-            onClick={handleCreate}
-            disabled={creating || !newName.trim()}
-            className="px-4 py-2 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-          >
-            {creating ? 'Creating…' : 'Create'}
-          </button>
-        </div>
-
-        {newKey && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 p-4 space-y-2">
-            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Save this key now — shown once</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 break-all text-xs font-mono text-[var(--ink)] bg-[var(--base)] rounded-lg px-3 py-2 border border-[var(--line)]">
-                {newKey}
-              </code>
-              <button
-                onClick={copyKey}
-                className="flex-shrink-0 px-3 py-2 rounded-lg bg-[var(--fill-strong)] text-xs text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <p className="text-[11px] text-[var(--ink-4)]">
-              Give this key to the business. They visit <strong className="text-[var(--ink-3)]">{frontendUrl}/portal</strong> and enter it to access their dashboard.
-            </p>
-            <button onClick={() => setNewKey(null)} className="text-xs text-[var(--ink-4)] hover:text-[var(--ink-3)] underline">Dismiss</button>
-          </div>
-        )}
-      </div>
-
-      {/* List */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-[var(--line)] flex items-center justify-between">
-          <p className="text-sm font-medium text-[var(--ink)]">Active tenants</p>
-          <span className="text-xs text-[var(--ink-4)]">{tenants.length} total</span>
-        </div>
-        {loading ? (
-          <div className="px-5 py-8 text-sm text-[var(--ink-4)] text-center">Loading…</div>
-        ) : tenants.length === 0 ? (
-          <div className="px-5 py-8 text-sm text-[var(--ink-4)] text-center">No tenants yet.</div>
-        ) : (
-          <div className="divide-y divide-[var(--line)]">
-            {tenants.map((t) => (
-              <div key={t.id} className="px-5 py-3.5 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-[var(--ink)] truncate">{t.business_name}</p>
-                    {t.revoked && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide bg-red-500/10 text-red-400 rounded-full px-1.5 py-0.5">Revoked</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--ink-4)] mt-0.5 font-mono">{t.api_key_prefix}</p>
-                  <p className="text-[11px] text-[var(--ink-4)] mt-0.5">
-                    {t.doc_count} doc{t.doc_count === 1 ? '' : 's'} · {t.chat_count} chat{t.chat_count === 1 ? '' : 's'} · {fmtDateTime(t.created_at)}
-                  </p>
-                </div>
-                {!t.revoked && (
-                  <button
-                    onClick={() => handleRevoke(t.id, t.business_name)}
-                    className="flex-shrink-0 text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
-                  >
-                    Revoke
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* How it works */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-5 space-y-3">
-        <p className="text-sm font-medium text-[var(--ink)]">How it works</p>
-        <ol className="space-y-2 text-sm text-[var(--ink-2)]">
-          {[
-            ['Create', `Create a tenant above → copy the API key (bk_...).`],
-            ['Portal', `Business goes to ${frontendUrl}/portal → enters their key → uploads their documents.`],
-            ['Embed', `They copy the iframe embed code from the portal → paste it on their website.`],
-            ['Chat', 'End users ask questions about the business — answered only from their uploaded docs.'],
-          ].map(([step, desc], i) => (
-            <li key={i} className="flex gap-3">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[var(--accent)]/15 text-[var(--accent-fg)] text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
-              <span><strong className="text-[var(--ink)]">{step}</strong> — {desc}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
-  );
-}
-
 // ── Shell ─────────────────────────────────────────────────────────────────────
 const navIcon = (key: Tab) => {
   const cls = 'w-4 h-4';
@@ -1954,10 +1785,6 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
     );
-  if (key === 'business')
-    return (
-      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-    );
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
   );
@@ -1979,7 +1806,6 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   const nav: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Users' },
-    { key: 'business', label: 'Business API' },
     { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
     { key: 'webhooks', label: 'Webhooks' },
@@ -2037,7 +1863,6 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
         <div key={tab} className="animate-fade-in flex-1 min-w-0 overflow-y-auto scroll-smooth px-5 md:px-8 py-6 md:py-7">
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
-          {tab === 'business' && <BusinessApiTab />}
           {tab === 'broadcast' && <BroadcastTab />}
           {tab === 'invites' && <InvitesTab />}
           {tab === 'webhooks' && <WebhooksTab />}

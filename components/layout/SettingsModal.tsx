@@ -23,6 +23,7 @@ import type { ChatSession } from '@/types';
 import { useT, getLang, setLang, type Lang } from '@/lib/i18n';
 import { ConfirmModal } from '@/components/layout/Dialogs';
 import { Logo } from '@/components/layout/Logo';
+import { DeveloperConsole } from '@/components/layout/DeveloperConsole';
 import { UserAvatar, AVATAR_PRESETS } from '@/components/layout/UserAvatar';
 import {
   ACCENTS,
@@ -228,6 +229,7 @@ function ApiKeysPanel() {
   const [creating, setCreating] = useState(false);
   const [freshKey, setFreshKey] = useState<string | null>(null); // shown ONCE
   const [revokeId, setRevokeId] = useState<number | null>(null);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   const refresh = () =>
     listApiKeys()
@@ -276,6 +278,31 @@ print(r.choices[0].message.content)`;
 
   return (
     <>
+      {/* Build-a-chatbot hero — opens the full Developer Console */}
+      <button
+        onClick={() => setConsoleOpen(true)}
+        className="w-full text-left mb-6 rounded-2xl border border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/12 to-transparent p-5 hover:from-[var(--accent)]/16 transition-colors group"
+      >
+        <div className="flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/15 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[var(--ink)] flex items-center gap-1.5">
+              Build an AI assistant for your app
+              <svg className="w-3.5 h-3.5 text-[var(--ink-3)] group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </p>
+            <p className="text-xs text-[var(--ink-3)] mt-1 leading-relaxed">
+              Create an app, upload your documents (PDF/Word), and embed a smart chat widget into your
+              product — your users get instant answers from <em>your</em> content, powered by Close AI.
+            </p>
+            <span className="inline-block mt-2.5 text-xs font-medium text-[var(--accent-fg)]">Open Developer Console →</span>
+          </div>
+        </div>
+      </button>
+
       <div className="mb-5">
         <h3 className={headingCls}>API Keys</h3>
         <p className={subCls}>
@@ -391,6 +418,8 @@ print(r.choices[0].message.content)`;
           onClose={() => setRevokeId(null)}
         />
       )}
+
+      {consoleOpen && <DeveloperConsole onClose={() => setConsoleOpen(false)} />}
     </>
   );
 }

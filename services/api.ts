@@ -250,6 +250,7 @@ export interface ApiKeyInfo {
   revoked: boolean;
   usage_count: number;
   total_tokens: number;
+  plan?: string;
   created_at?: string;
   last_used_at?: string;
 }
@@ -918,19 +919,17 @@ export async function adminTestWebhook(id: number): Promise<string> {
   return res.data.last_status ?? 'unknown';
 }
 
-// ── Business tenant API (B2B RAG) ─────────────────────────────────────────────
+// ── Per-app RAG knowledge base (built on developer ck_ keys) ──────────────────
 
-export interface BusinessTenantRow {
-  id: number;
-  business_name: string;
-  api_key_prefix: string;
-  doc_count: number;
-  chat_count: number;
-  revoked: boolean;
-  created_at: string | null;
+export interface PlanTier {
+  key: string;
+  label: string;
+  price: string;
+  doc_limit: number;
+  blurb: string;
 }
 
-export interface BusinessDocumentRow {
+export interface KbDocument {
   id: number;
   filename: string;
   file_size: number;
@@ -938,70 +937,55 @@ export interface BusinessDocumentRow {
   uploaded_at: string | null;
 }
 
-export interface BusinessMe {
-  id: number;
-  business_name: string;
+export interface KbInfo {
+  key_id: number;
+  name: string;
+  plan: string;
+  doc_limit: number;
   doc_count: number;
-  chat_count: number;
-  documents: BusinessDocumentRow[];
+  widget_token: string;
+  documents: KbDocument[];
 }
 
-export async function adminCreateBusinessTenant(
-  name: string
-): Promise<BusinessTenantRow & { api_key: string; warning: string }> {
-  const res = await client.post<BusinessTenantRow & { api_key: string; warning: string }>(
-    '/admin/business',
-    { business_name: name }
-  );
+/** Plan tiers (display-only pricing; doc limits are enforced server-side). */
+export async function getPlans(): Promise<PlanTier[]> {
+  const res = await client.get<{ plans: PlanTier[] }>('/plans');
+  return res.data.plans ?? [];
+}
+
+/** Owner view: an app's knowledge base + plan + docs + public widget token. */
+export async function getKb(keyId: number): Promise<KbInfo> {
+  const res = await client.get<KbInfo>(`/api-keys/${keyId}/kb`);
   return res.data;
 }
 
-export async function adminListBusinessTenants(): Promise<BusinessTenantRow[]> {
-  const res = await client.get<BusinessTenantRow[]>('/admin/business');
-  return Array.isArray(res.data) ? res.data : [];
-}
-
-export async function adminRevokeBusiness(id: number): Promise<void> {
-  await client.delete(`/admin/business/${id}`);
-}
-
-/** Business portal calls — authenticated via the raw bk_... key, not a JWT. */
-function bizHeaders(key: string) {
-  return { headers: { 'X-Business-Key': key } };
-}
-
-export async function businessGetMe(key: string): Promise<BusinessMe> {
-  const res = await client.get<BusinessMe>('/business/me', bizHeaders(key));
-  return res.data;
-}
-
-export async function businessUploadDocument(
-  key: string,
+export async function uploadKbDocument(
+  keyId: number,
   file: File
-): Promise<{ id: number; filename: string; chunk_count: number; message: string }> {
+): Promise<KbDocument & { message: string }> {
   const form = new FormData();
   form.append('file', file);
-  const res = await client.post<{ id: number; filename: string; chunk_count: number; message: string }>(
-    '/business/documents',
-    form,
-    bizHeaders(key)
+  const res = await client.post<KbDocument & { message: string }>(
+    `/api-keys/${keyId}/documents`,
+    form
   );
   return res.data;
 }
 
-export async function businessDeleteDocument(key: string, docId: number): Promise<void> {
-  await client.delete(`/business/documents/${docId}`, bizHeaders(key));
+export async function deleteKbDocument(keyId: number, docId: number): Promise<void> {
+  await client.delete(`/api-keys/${keyId}/documents/${docId}`);
 }
 
-export async function businessChat(
-  key: string,
+/** End-user RAG chat — authenticated by the public widget token (wk_...). */
+export async function ragChat(
+  widgetToken: string,
   question: string,
   history: { role: string; content: string }[]
 ): Promise<{ answer: string; sources: { content: string; filename: string }[] }> {
   const res = await client.post<{ answer: string; sources: { content: string; filename: string }[] }>(
-    '/business/chat',
+    '/v1/rag/chat',
     { question, history },
-    bizHeaders(key)
+    { headers: { 'X-Widget-Token': widgetToken } }
   );
   return res.data;
 }
