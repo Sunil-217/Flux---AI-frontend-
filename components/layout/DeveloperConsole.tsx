@@ -38,6 +38,24 @@ function fmtDate(iso: string | null | undefined): string {
   return d ? d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 }
 
+const FILE_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const CHAT_ICON = (
+  <svg className="w-full h-full" fill="none" stroke="currentColor" strokeWidth={1.7} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" />
+  </svg>
+);
+
+/** Deterministic accent-tinted avatar initials for an app. */
+function appGlyph(name: string) {
+  const letter = (name.trim()[0] || 'A').toUpperCase();
+  return letter;
+}
+
 // ── Create-app modal (shows the secret key ONCE) ────────────────────────────────
 function CreateAppModal({
   onClose,
@@ -73,15 +91,19 @@ function CreateAppModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-2xl p-6 space-y-4 animate-card-in">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-md px-4">
+      <div className="animate-modal-in relative w-full max-w-md rounded-3xl border border-[var(--line-strong)] bg-[var(--elevated)] shadow-2xl p-6 space-y-5 overflow-hidden">
+        <div className="grain-overlay" />
         {!freshKey ? (
           <>
-            <div>
-              <h3 className="text-base font-semibold text-[var(--ink)]">Create a new app</h3>
-              <p className="text-xs text-[var(--ink-3)] mt-1">
-                Each app has its own API key and isolated knowledge base.
-              </p>
+            <div className="relative flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-[var(--accent)]/12 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[var(--ink)]">Create a new app</h3>
+                <p className="text-xs text-[var(--ink-3)] mt-0.5">Each app has its own key + knowledge base.</p>
+              </div>
             </div>
             <input
               autoFocus
@@ -90,16 +112,16 @@ function CreateAppModal({
               onKeyDown={(e) => e.key === 'Enter' && create()}
               placeholder="App name (e.g. Acme Support Bot)"
               maxLength={60}
-              className="w-full rounded-xl border border-[var(--line)] bg-[var(--base)] px-3.5 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              className="relative w-full rounded-xl border border-[var(--line)] bg-[var(--base)] px-3.5 py-3 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition-shadow"
             />
-            <div className="flex justify-end gap-2">
+            <div className="relative flex justify-end gap-2">
               <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">
                 Cancel
               </button>
               <button
                 onClick={create}
                 disabled={creating || !name.trim()}
-                className="px-4 py-2 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+                className="btn-shine px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium disabled:opacity-40 hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent)]/20"
               >
                 {creating ? 'Creating…' : 'Create app'}
               </button>
@@ -107,15 +129,17 @@ function CreateAppModal({
           </>
         ) : (
           <>
-            <div>
-              <h3 className="text-base font-semibold text-[var(--ink)]">App created 🎉</h3>
-              <p className="text-xs text-[var(--ink-3)] mt-1">
-                Your <strong className="text-[var(--ink)]">secret key</strong> is shown once. Use it for server-side
-                API calls. (Your embeddable widget uses a separate public token — always available in Integration.)
-              </p>
+            <div className="relative flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/12 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[var(--ink)]">App created</h3>
+                <p className="text-xs text-[var(--ink-3)] mt-0.5">Save your secret key — shown only once.</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 p-3.5 space-y-2">
-              <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wide">Copy now — never shown again</p>
+            <div className="relative rounded-xl border border-amber-500/30 bg-amber-500/8 p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Secret key · server-side use</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 break-all text-[11px] font-mono text-[var(--ink)] bg-[var(--base)] rounded-lg px-2.5 py-2 border border-[var(--line)] select-all">
                   {freshKey.key}
@@ -124,13 +148,16 @@ function CreateAppModal({
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
+              <p className="text-[10px] text-[var(--ink-4)] leading-relaxed">
+                For embedding the chat widget you'll use a separate public token — always available under Integration.
+              </p>
             </div>
-            <div className="flex justify-end">
+            <div className="relative flex justify-end">
               <button
                 onClick={() => onCreated(freshKey.info)}
-                className="px-4 py-2 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium hover:opacity-90 transition-opacity"
+                className="btn-shine px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent)]/20"
               >
-                Continue to app
+                Continue →
               </button>
             </div>
           </>
@@ -144,9 +171,11 @@ function CreateAppModal({
 // ── Knowledge base sub-tab ──────────────────────────────────────────────────────
 function KnowledgeTab({ kb, onChange }: { kb: KbInfo; onChange: () => void }) {
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const atLimit = kb.doc_count >= kb.doc_limit;
+  const unlimited = kb.doc_limit >= 100000;
 
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -162,7 +191,7 @@ function KnowledgeTab({ kb, onChange }: { kb: KbInfo; onChange: () => void }) {
         ok++;
       } catch (e) {
         toast.error(`${file.name}: ${apiError(e, 'Upload failed.')}`);
-        break; // likely hit the plan limit — stop
+        break;
       }
     }
     if (ok > 0) toast.success(`${ok} document${ok > 1 ? 's' : ''} indexed.`);
@@ -184,36 +213,44 @@ function KnowledgeTab({ kb, onChange }: { kb: KbInfo; onChange: () => void }) {
     setDeletingId(null);
   }
 
-  const pct = Math.min(100, Math.round((kb.doc_count / Math.max(1, kb.doc_limit)) * 100));
+  const pct = unlimited ? Math.min(100, kb.doc_count * 8) : Math.min(100, Math.round((kb.doc_count / Math.max(1, kb.doc_limit)) * 100));
 
   return (
     <div className="space-y-5">
-      {/* Usage bar */}
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--fill)] px-4 py-3">
-        <div className="flex items-center justify-between text-xs mb-2">
-          <span className="text-[var(--ink-2)] font-medium">
-            {kb.doc_count} / {kb.doc_limit === 100000 ? '∞' : kb.doc_limit} documents
+      {/* Usage meter */}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] px-4 py-3.5">
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-sm font-semibold text-[var(--ink)] tabular-nums">{kb.doc_count}</span>
+            <span className="text-xs text-[var(--ink-4)]">/ {unlimited ? '∞' : kb.doc_limit} documents</span>
+          </div>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-fg)] bg-[var(--accent)]/10 rounded-full px-2 py-0.5 capitalize">
+            {kb.plan} plan
           </span>
-          <span className="text-[var(--ink-4)] capitalize">{kb.plan} plan</span>
         </div>
-        <div className="h-1.5 rounded-full bg-[var(--fill-strong)] overflow-hidden">
+        <div className="h-2 rounded-full bg-[var(--fill-strong)] overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${atLimit ? 'bg-amber-500' : 'bg-[var(--accent)]'}`}
-            style={{ width: `${kb.doc_limit === 100000 ? Math.min(100, kb.doc_count) : pct}%` }}
+            className={`h-full rounded-full transition-all duration-500 ${atLimit && !unlimited ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 'bg-gradient-to-r from-[var(--grad-from)] to-[var(--grad-to)]'}`}
+            style={{ width: `${pct}%` }}
           />
         </div>
       </div>
 
-      {/* Upload */}
+      {/* Upload dropzone */}
       <div
-        className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+        role="button"
+        tabIndex={0}
+        className={`rounded-2xl border-2 border-dashed p-9 text-center transition-all ${
           atLimit
             ? 'border-[var(--line)] opacity-60 cursor-not-allowed'
-            : 'border-[var(--line)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/4 cursor-pointer'
+            : dragOver
+            ? 'border-[var(--accent)] bg-[var(--accent)]/8 cursor-pointer scale-[1.005]'
+            : 'border-[var(--line-strong)] hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/4 cursor-pointer'
         }`}
         onClick={() => !atLimit && fileRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); if (!atLimit) upload(e.dataTransfer.files); }}
+        onDragOver={(e) => { e.preventDefault(); if (!atLimit) setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!atLimit) upload(e.dataTransfer.files); }}
       >
         <input
           ref={fileRef}
@@ -224,69 +261,83 @@ function KnowledgeTab({ kb, onChange }: { kb: KbInfo; onChange: () => void }) {
           onChange={(e) => upload(e.target.files)}
         />
         {uploading ? (
-          <div className="space-y-2">
-            <div className="w-7 h-7 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin mx-auto" />
+          <div className="space-y-3">
+            <div className="w-9 h-9 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin mx-auto" />
             <p className="text-sm text-[var(--ink-3)]">Uploading and indexing…</p>
           </div>
         ) : atLimit ? (
           <p className="text-sm text-[var(--ink-3)]">
-            Plan limit reached. <span className="text-[var(--accent-fg)]">Upgrade</span> to add more documents.
+            Plan limit reached. Open <span className="text-[var(--accent-fg)] font-medium">Plans</span> to add more documents.
           </p>
         ) : (
-          <div className="space-y-1.5">
-            <svg className="w-7 h-7 text-[var(--ink-4)] mx-auto" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-            </svg>
-            <p className="text-sm text-[var(--ink-2)]">Drop files or <span className="text-[var(--accent-fg)]">click to upload</span></p>
-            <p className="text-[11px] text-[var(--ink-4)]">PDF, Word, Excel, PowerPoint, TXT, MD, CSV · Max 20 MB</p>
+          <div className="space-y-2.5">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--accent)]/10 text-[var(--accent-fg)] flex items-center justify-center mx-auto">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.6} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-[var(--ink-2)]">Drop files or <span className="text-[var(--accent-fg)]">click to upload</span></p>
+            <p className="text-[11px] text-[var(--ink-4)]">PDF · Word · Excel · PowerPoint · TXT · MD · CSV — up to 20 MB</p>
           </div>
         )}
       </div>
 
       {/* Doc list */}
-      {kb.documents.length > 0 && (
-        <div className="rounded-2xl border border-[var(--line)] overflow-hidden divide-y divide-[var(--line)]">
+      {kb.documents.length > 0 ? (
+        <div className="space-y-2">
           {kb.documents.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-3 px-4 py-3 bg-[var(--fill)]">
-              <svg className="w-4 h-4 text-[var(--ink-4)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+            <div
+              key={doc.id}
+              className="group flex items-center gap-3 px-3.5 py-3 rounded-xl border border-[var(--line)] bg-[var(--fill)] hover:bg-[var(--fill-hover)] transition-colors"
+            >
+              <div className="w-9 h-9 rounded-lg bg-[var(--accent)]/10 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0">
+                {FILE_ICON}
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-[var(--ink)] truncate">{doc.filename}</p>
-                <p className="text-[11px] text-[var(--ink-4)]">{fmtSize(doc.file_size)} · {doc.chunk_count} chunks · {fmtDate(doc.uploaded_at)}</p>
+                <p className="text-sm font-medium text-[var(--ink)] truncate">{doc.filename}</p>
+                <p className="text-[11px] text-[var(--ink-4)] mt-0.5">{fmtSize(doc.file_size)} · {doc.chunk_count} chunks · {fmtDate(doc.uploaded_at)}</p>
               </div>
               <button
                 onClick={() => remove(doc)}
                 disabled={deletingId === doc.id}
-                className="flex-shrink-0 text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                className="flex-shrink-0 text-xs text-[var(--ink-4)] hover:text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-40 md:opacity-0 md:group-hover:opacity-100"
               >
                 {deletingId === doc.id ? '…' : 'Delete'}
               </button>
             </div>
           ))}
         </div>
+      ) : (
+        !uploading && (
+          <p className="text-center text-xs text-[var(--ink-4)] py-2">
+            No documents yet — upload your first to power the assistant.
+          </p>
+        )
       )}
     </div>
   );
 }
 
 // ── Integration sub-tab ─────────────────────────────────────────────────────────
-function CopyBlock({ code, label }: { code: string; label: string }) {
+function CodeWindow({ code, filename }: { code: string; filename: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-[var(--ink-2)]">{label}</p>
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--base)] overflow-hidden">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--line)] bg-[var(--fill)]">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
+          <span className="ml-2 text-[11px] font-mono text-[var(--ink-4)]">{filename}</span>
+        </div>
         <button
           onClick={() => navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
-          className="text-[11px] text-[var(--accent-fg)] hover:opacity-80 transition-opacity"
+          className="text-[11px] font-medium text-[var(--ink-3)] hover:text-[var(--ink)] px-2 py-0.5 rounded-md hover:bg-[var(--fill-strong)] transition-colors"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <pre className="text-[11px] font-mono text-[var(--ink-2)] bg-[var(--base)] border border-[var(--line)] rounded-xl p-3 overflow-x-auto whitespace-pre">
-        {code}
-      </pre>
+      <pre className="text-[11px] leading-relaxed font-mono text-[var(--ink-2)] p-3.5 overflow-x-auto whitespace-pre">{code}</pre>
     </div>
   );
 }
@@ -297,32 +348,50 @@ function IntegrationTab({ kb }: { kb: KbInfo }) {
   const embedUrl = `${origin}/embed/chat?app=${kb.widget_token}`;
   const iframeCode = `<iframe\n  src="${embedUrl}"\n  width="400"\n  height="600"\n  frameborder="0"\n  style="border:none;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.3)"\n></iframe>`;
   const jsCode = `const res = await fetch("${apiBase}/v1/rag/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "X-Widget-Token": "${kb.widget_token}"\n  },\n  body: JSON.stringify({ question: "What are your hours?", history: [] })\n});\nconst { answer, sources } = await res.json();`;
-  const curlCode = `curl -X POST ${apiBase}/v1/rag/chat \\\n  -H "Content-Type: application/json" \\\n  -H "X-Widget-Token: ${kb.widget_token}" \\\n  -d '{"question":"What are your hours?","history":[]}'`;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/5 px-4 py-3">
-        <p className="text-xs text-[var(--ink-2)]">
-          The <strong className="text-[var(--ink)]">widget token</strong> below is public and safe to embed — it can
-          only answer questions from this app's documents. Drop the iframe into any page and your users get an instant
-          AI assistant.
-        </p>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+      <div className="space-y-5 min-w-0">
+        <div className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/6 px-4 py-3">
+          <p className="text-xs text-[var(--ink-2)] leading-relaxed">
+            Your <strong className="text-[var(--ink)]">widget token</strong> is public and safe to embed — it only answers
+            from this app's documents and can't access anything else.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-[var(--ink)]">1 · Embed the chat widget</p>
+          <CodeWindow filename="index.html" code={iframeCode} />
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-[var(--ink)]">2 · Or call the API directly</p>
+          <CodeWindow filename="chat.js" code={jsCode} />
+        </div>
       </div>
 
-      <CopyBlock label="1 — Embed the chat widget (HTML)" code={iframeCode} />
-
-      <a
-        href={embedUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs text-[var(--accent-fg)] hover:opacity-80 transition-opacity"
-      >
-        Preview widget
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-      </a>
-
-      <CopyBlock label="2 — Or call the API directly (JavaScript)" code={jsCode} />
-      <CopyBlock label="Or with curl" code={curlCode} />
+      {/* Live preview */}
+      <div className="lg:sticky lg:top-0">
+        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Live preview</p>
+        <div className="rounded-2xl border border-[var(--line-strong)] bg-[var(--base)] p-2 shadow-2xl shadow-black/40">
+          <iframe
+            key={kb.widget_token}
+            src={embedUrl}
+            title="Widget preview"
+            className="w-full rounded-xl bg-[#0a0a0b]"
+            style={{ height: 440, border: 'none' }}
+          />
+        </div>
+        <a
+          href={embedUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ink-3)] hover:text-[var(--ink)] mt-2 transition-colors"
+        >
+          Open full screen
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14 4h6m0 0v6m0-6L10 14M6 6H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-1" /></svg>
+        </a>
+      </div>
     </div>
   );
 }
@@ -333,36 +402,48 @@ function PlansTab({ kb, plans }: { kb: KbInfo; plans: PlanTier[] }) {
     <div className="space-y-4">
       <p className="text-xs text-[var(--ink-3)]">
         Your app is on the <strong className="text-[var(--ink)] capitalize">{kb.plan}</strong> plan. Upgrade to grow your
-        knowledge base. (Payments are coming soon.)
+        knowledge base — payments are coming soon.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {plans.map((p) => {
           const current = p.key === kb.plan;
+          const popular = p.key === 'pro';
           return (
             <div
               key={p.key}
-              className={`rounded-2xl border p-4 flex flex-col ${
-                current ? 'border-[var(--accent)]/50 bg-[var(--accent)]/8' : 'border-[var(--line)] bg-[var(--fill)]'
+              className={`relative rounded-2xl border p-4 flex flex-col overflow-hidden ${
+                current
+                  ? 'border-[var(--accent)]/60 bg-gradient-to-br from-[var(--accent)]/12 to-transparent'
+                  : popular
+                  ? 'border-[var(--line-strong)] bg-[var(--fill)]'
+                  : 'border-[var(--line)] bg-[var(--fill)]'
               }`}
             >
-              <div className="flex items-baseline justify-between">
+              {popular && !current && (
+                <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider text-[var(--accent-fg)] bg-[var(--accent)]/12 rounded-full px-1.5 py-0.5">Popular</span>
+              )}
+              <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--ink)]">{p.label}</p>
                 {current && (
-                  <span className="text-[9px] font-bold uppercase tracking-wide text-[var(--accent-fg)] bg-[var(--accent)]/15 rounded-full px-1.5 py-0.5">Current</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-fg)] bg-[var(--accent)]/15 rounded-full px-1.5 py-0.5">Current</span>
                 )}
               </div>
-              <p className="text-lg font-semibold text-[var(--ink)] mt-1">{p.price}</p>
-              <p className="text-[11px] text-[var(--ink-4)] mt-1.5 flex-1">{p.blurb}</p>
+              <p className="text-2xl font-semibold text-[var(--ink)] mt-1.5 tabular-nums">{p.price}</p>
+              <div className="flex items-center gap-1.5 mt-2 text-[11px] text-[var(--ink-3)]">
+                <svg className="w-3.5 h-3.5 text-[var(--accent-fg)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                <span>{p.doc_limit >= 100000 ? 'Unlimited' : p.doc_limit} document{p.doc_limit === 1 ? '' : 's'}</span>
+              </div>
+              <p className="text-[11px] text-[var(--ink-4)] mt-1 flex-1 leading-relaxed">{p.blurb}</p>
               <button
                 disabled={current}
                 onClick={() => toast('Payments coming soon 🚀', { icon: '💳' })}
-                className={`mt-3 w-full py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`mt-3.5 w-full py-2 rounded-xl text-xs font-medium transition-opacity ${
                   current
                     ? 'bg-[var(--fill-strong)] text-[var(--ink-4)] cursor-default'
-                    : 'bg-[var(--accent)] text-[var(--accent-fg)] hover:opacity-90'
+                    : 'btn-shine bg-[var(--accent)] text-white hover:opacity-90'
                 }`}
               >
-                {current ? 'Active' : 'Upgrade'}
+                {current ? 'Current plan' : 'Upgrade'}
               </button>
             </div>
           );
@@ -428,15 +509,22 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
 
   if (typeof document === 'undefined') return null;
 
+  const subTabs: [Sub, string][] = [
+    ['knowledge', 'Knowledge base'],
+    ['integration', 'Integration'],
+    ['plans', 'Plans'],
+  ];
+
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[var(--base)]">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[var(--base)]" style={{ backgroundImage: 'var(--glow)', backgroundAttachment: 'fixed', backgroundRepeat: 'no-repeat' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 md:px-7 h-16 flex-shrink-0 border-b border-[var(--line)] bg-[var(--panel)]">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="relative flex items-center justify-between px-5 md:px-7 h-16 flex-shrink-0 border-b border-[var(--line)] bg-[var(--panel)] backdrop-blur-xl overflow-hidden">
+        <div className="brand-glyph" style={{ opacity: 0.5 }} />
+        <div className="relative flex items-center gap-3 min-w-0">
           <Logo size={30} />
           <div className="min-w-0">
-            <h2 className="text-lg font-display font-medium text-[var(--ink)] tracking-tight leading-none flex items-center gap-2">
-              Developer Platform
+            <h2 className="text-lg font-display font-medium tracking-tight leading-none flex items-center gap-2">
+              <span className="text-gradient">Developer Platform</span>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent-fg)] bg-[var(--accent)]/10 rounded-full px-2 py-0.5">
                 RAG apps
               </span>
@@ -446,7 +534,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
         </div>
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-sm font-medium text-[var(--ink-3)] hover:text-[var(--ink)] rounded-lg px-3 py-1.5 hover:bg-[var(--fill)] transition-colors"
+          className="relative flex items-center gap-1.5 text-sm font-medium text-[var(--ink-3)] hover:text-[var(--ink)] rounded-lg px-3 py-1.5 hover:bg-[var(--fill)] transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -457,10 +545,10 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
 
       <div className="flex flex-col md:flex-row flex-1 min-h-0">
         {/* App list rail */}
-        <nav className="flex flex-col md:w-64 flex-shrink-0 border-b md:border-b-0 md:border-r border-[var(--line)] bg-[var(--panel)]/40 p-3 md:p-4 gap-2 overflow-y-auto">
+        <nav className="flex flex-col md:w-72 flex-shrink-0 border-b md:border-b-0 md:border-r border-[var(--line)] bg-[var(--panel)]/40 p-3 md:p-4 gap-2 overflow-y-auto">
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium hover:opacity-90 transition-opacity"
+            className="btn-shine flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent)]/20"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
             New app
@@ -471,44 +559,51 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
           ) : apps.length === 0 ? (
             <p className="text-xs text-[var(--ink-4)] px-2 py-3 leading-relaxed">No apps yet. Create one to get an API key and start uploading documents.</p>
           ) : (
-            apps.map((app) => (
-              <button
-                key={app.id}
-                onClick={() => { setSelectedId(app.id); setSub('knowledge'); }}
-                className={`text-left px-3 py-2.5 rounded-xl transition-colors ${
-                  selectedId === app.id
-                    ? 'bg-[var(--fill-strong)] text-[var(--ink)]'
-                    : 'text-[var(--ink-3)] hover:bg-[var(--fill)] hover:text-[var(--ink-2)]'
-                }`}
-              >
-                <p className="text-sm font-medium truncate">{app.name}</p>
-                <p className="text-[10px] font-mono text-[var(--ink-4)] mt-0.5">{app.prefix} · {app.plan ?? 'free'}</p>
-              </button>
-            ))
+            apps.map((app) => {
+              const active = selectedId === app.id;
+              return (
+                <button
+                  key={app.id}
+                  onClick={() => { setSelectedId(app.id); setSub('knowledge'); }}
+                  className={`flex items-center gap-2.5 text-left px-2.5 py-2.5 rounded-xl transition-colors ${
+                    active ? 'bg-[var(--fill-strong)]' : 'hover:bg-[var(--fill)]'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm font-semibold ${
+                    active ? 'bg-[var(--accent)]/15 text-[var(--accent-fg)]' : 'bg-[var(--fill-strong)] text-[var(--ink-3)]'
+                  }`}>
+                    {appGlyph(app.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-medium truncate ${active ? 'text-[var(--ink)]' : 'text-[var(--ink-2)]'}`}>{app.name}</p>
+                    <p className="text-[10px] font-mono text-[var(--ink-4)] mt-0.5 truncate">{app.prefix} · {app.plan ?? 'free'}</p>
+                  </div>
+                </button>
+              );
+            })
           )}
         </nav>
 
         {/* Main */}
         <div className="flex-1 min-w-0 overflow-y-auto px-5 md:px-8 py-6 md:py-7">
           {!selectedId || !kb ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="relative h-full flex items-center justify-center overflow-hidden">
+              <div className="brand-glyph" style={{ opacity: 0.6 }} />
               {loadingKb ? (
-                <p className="text-sm text-[var(--ink-4)]">Loading…</p>
+                <div className="relative w-7 h-7 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" />
               ) : (
-                <div className="text-center max-w-sm space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-[var(--accent)]/8 border border-[var(--accent)]/15 flex items-center justify-center mx-auto">
-                    <svg className="w-7 h-7 text-[var(--accent-fg)]/60" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" />
-                    </svg>
+                <div className="relative text-center max-w-sm space-y-4 animate-card-in">
+                  <div className="w-16 h-16 rounded-3xl bg-[var(--accent)]/10 border border-[var(--accent)]/15 flex items-center justify-center mx-auto p-4 text-[var(--accent-fg)]/70">
+                    {CHAT_ICON}
                   </div>
-                  <h3 className="text-base font-semibold text-[var(--ink)]">Create your first AI app</h3>
-                  <p className="text-sm text-[var(--ink-3)]">
+                  <h3 className="text-2xl font-display font-medium text-[var(--ink)]">Create your first <span className="text-gradient">AI app</span></h3>
+                  <p className="text-sm text-[var(--ink-3)] leading-relaxed">
                     Get an API key, upload your business documents, and embed a smart chat assistant into your product —
-                    powered by Close AI.
+                    answering only from <em>your</em> content.
                   </p>
                   <button
                     onClick={() => setShowCreate(true)}
-                    className="px-4 py-2 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium hover:opacity-90 transition-opacity"
+                    className="btn-shine px-5 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-lg shadow-[var(--accent)]/20"
                   >
                     Create an app
                   </button>
@@ -516,37 +611,38 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
               )}
             </div>
           ) : (
-            <div className="max-w-3xl">
+            <div key={kb.key_id} className="max-w-3xl animate-fade-in">
               {/* App header */}
-              <div className="flex items-start justify-between gap-3 mb-5">
-                <div className="min-w-0">
-                  <h1 className="text-xl font-semibold text-[var(--ink)] truncate">{kb.name}</h1>
-                  <p className="text-xs text-[var(--ink-4)] mt-1">
-                    {kb.doc_count} document{kb.doc_count === 1 ? '' : 's'} · <span className="capitalize">{kb.plan}</span> plan
-                  </p>
+              <div className="flex items-start justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-[var(--accent)]/12 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0 text-lg font-semibold">
+                    {appGlyph(kb.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-semibold text-[var(--ink)] truncate">{kb.name}</h1>
+                    <p className="text-xs text-[var(--ink-4)] mt-0.5">
+                      {kb.doc_count} document{kb.doc_count === 1 ? '' : 's'} · <span className="capitalize">{kb.plan}</span> plan
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => handleRevoke(apps.find((a) => a.id === kb.key_id)!)}
-                  className="flex-shrink-0 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                  className="flex-shrink-0 text-xs text-[var(--ink-4)] hover:text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
                 >
                   Delete app
                 </button>
               </div>
 
-              {/* Sub-tabs */}
-              <div className="flex gap-1 mb-6 border-b border-[var(--line)]">
-                {([
-                  ['knowledge', 'Knowledge base'],
-                  ['integration', 'Integration'],
-                  ['plans', 'Plans'],
-                ] as [Sub, string][]).map(([k, label]) => (
+              {/* Segmented sub-tabs */}
+              <div className="inline-flex items-center gap-1 mb-6 p-1 rounded-xl bg-[var(--fill)] border border-[var(--line)]">
+                {subTabs.map(([k, label]) => (
                   <button
                     key={k}
                     onClick={() => setSub(k)}
-                    className={`px-3.5 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+                    className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       sub === k
-                        ? 'border-[var(--accent)] text-[var(--ink)]'
-                        : 'border-transparent text-[var(--ink-3)] hover:text-[var(--ink-2)]'
+                        ? 'bg-[var(--elevated)] text-[var(--ink)] shadow-sm'
+                        : 'text-[var(--ink-3)] hover:text-[var(--ink-2)]'
                     }`}
                   >
                     {label}
@@ -554,9 +650,11 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
 
-              {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => loadKb(kb.key_id)} />}
-              {sub === 'integration' && <IntegrationTab kb={kb} />}
-              {sub === 'plans' && <PlansTab kb={kb} plans={plans} />}
+              <div key={sub} className="animate-fade-in">
+                {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => loadKb(kb.key_id)} />}
+                {sub === 'integration' && <IntegrationTab kb={kb} />}
+                {sub === 'plans' && <PlansTab kb={kb} plans={plans} />}
+              </div>
             </div>
           )}
         </div>
