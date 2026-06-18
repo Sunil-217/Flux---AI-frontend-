@@ -10,14 +10,10 @@ import {
   apiError,
   STYLE_KEY,
   CUSTOM_INSTRUCTIONS_KEY,
-  createApiKey,
-  listApiKeys,
-  revokeApiKey,
   getMemoryFacts,
   clearMemory,
   deleteMemoryFact,
   getChats,
-  type ApiKeyInfo,
 } from '@/services/api';
 import type { ChatSession } from '@/types';
 import { useT, getLang, setLang, type Lang } from '@/lib/i18n';
@@ -217,254 +213,60 @@ function ReqItem({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   );
 }
 
-// API base shown in the quick-start snippet (same one the app itself talks to).
-const PUBLIC_API_BASE =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://127.0.0.1:8000';
 
-/** Developer platform panel: create / list / revoke API keys + quick-start docs. */
+/** API Keys tab — a single entry point into the full Developer Console, where
+ *  keys, knowledge bases, and embed code are all managed. */
 function ApiKeysPanel() {
-  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [freshKey, setFreshKey] = useState<string | null>(null); // shown ONCE
-  const [revokeId, setRevokeId] = useState<number | null>(null);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [qsLang, setQsLang] = useState('python');
 
-  const refresh = () =>
-    listApiKeys()
-      .then(setKeys)
-      .catch(() => toast.error('Could not load API keys.'))
-      .finally(() => setLoading(false));
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  const create = async () => {
-    if (!newName.trim() || creating) return;
-    setCreating(true);
-    try {
-      const { key } = await createApiKey(newName.trim());
-      setFreshKey(key);
-      setNewName('');
-      refresh();
-    } catch (e) {
-      toast.error(apiError(e, 'Could not create the key.'));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const copy = (text: string) => {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => toast.success('Copied'))
-      .catch(() => toast.error('Copy failed — select it manually.'));
-  };
-
-  const active = keys.filter((k) => !k.revoked);
-  const QS_SNIPPETS: { id: string; label: string; code: string }[] = [
-    {
-      id: 'python', label: 'Python',
-      code: `from openai import OpenAI
-
-client = OpenAI(
-    base_url="${PUBLIC_API_BASE}/v1",
-    api_key="ck_...",  # your key
-)
-r = client.chat.completions.create(
-    model="close-chat",  # or "close-code"
-    messages=[{"role": "user", "content": "Hello!"}],
-)
-print(r.choices[0].message.content)`,
-    },
-    {
-      id: 'javascript', label: 'JavaScript',
-      code: `import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "${PUBLIC_API_BASE}/v1",
-  apiKey: "ck_...", // your key
-});
-const r = await client.chat.completions.create({
-  model: "close-chat", // or "close-code"
-  messages: [{ role: "user", content: "Hello!" }],
-});
-console.log(r.choices[0].message.content);`,
-    },
-    {
-      id: 'curl', label: 'cURL',
-      code: `curl ${PUBLIC_API_BASE}/v1/chat/completions \\
-  -H "Authorization: Bearer ck_..." \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "close-chat",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'`,
-    },
+  const FEATURES: [string, string][] = [
+    ['Generate API keys', 'M15 7a2 2 0 012 2m4-2a6 6 0 01-7.74 5.74L9 17H7v2H5v2H2v-3l6.26-6.26A6 6 0 1121 7z'],
+    ['Upload your documents', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'],
+    ['Embed a chat widget', 'M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z'],
+    ['Copy SDK code · 8 languages', 'M10 20l4-16M14 8l4 4-4 4M6 16l-4-4 4-4'],
   ];
-  const qsActive = QS_SNIPPETS.find((s) => s.id === qsLang) || QS_SNIPPETS[0];
 
   return (
     <>
-      {/* Build-a-chatbot hero — opens the full Developer Console */}
+      <div className="mb-5">
+        <h3 className={headingCls}>Developer Platform</h3>
+        <p className={subCls}>
+          Create API keys, build a knowledge base, and embed an AI assistant — all in the Developer Console.
+        </p>
+      </div>
+
+      {/* The only entry point — opens the full Developer Console */}
       <button
         onClick={() => setConsoleOpen(true)}
-        className="w-full text-left mb-6 rounded-2xl border border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/12 to-transparent p-5 hover:from-[var(--accent)]/16 transition-colors group"
+        className="btn-shine w-full text-left rounded-2xl border border-[var(--accent)]/40 bg-gradient-to-br from-[var(--accent)]/12 to-transparent p-5 hover:from-[var(--accent)]/16 transition-colors group"
       >
         <div className="flex items-start gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/15 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-[var(--accent)]/15 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-[var(--ink)] flex items-center gap-1.5">
+            <p className="text-base font-semibold text-[var(--ink)] flex items-center gap-1.5">
               Build an AI assistant for your app
-              <svg className="w-3.5 h-3.5 text-[var(--ink-3)] group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              <svg className="w-4 h-4 text-[var(--ink-3)] group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
             </p>
             <p className="text-xs text-[var(--ink-3)] mt-1 leading-relaxed">
-              Create an app, upload your documents (PDF/Word), and embed a smart chat widget into your
-              product — your users get instant answers from <em>your</em> content, powered by Close AI.
+              Your users get instant answers from <em>your</em> content (PDF, Word, and more), powered by Close AI.
             </p>
-            <span className="inline-block mt-2.5 text-xs font-medium text-[var(--accent-fg)]">Open Developer Console →</span>
+            <span className="inline-block mt-3 text-sm font-medium text-[var(--accent-fg)]">Open Developer Console →</span>
           </div>
         </div>
       </button>
 
-      <div className="mb-5">
-        <h3 className={headingCls}>API Keys</h3>
-        <p className={subCls}>
-          Use Close AI as a service — generate a key and call the OpenAI-compatible API from your
-          own apps. Limit: 20 requests/min per key.
-        </p>
-      </div>
-
-      {/* Create */}
-      <div className="flex items-center gap-2 mb-5">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && create()}
-          placeholder="Key name (e.g. my-app)"
-          maxLength={60}
-          className={inputCls}
-        />
-        <button onClick={create} disabled={creating || !newName.trim()} className={btnCls}>
-          {creating ? 'Creating…' : 'Create key'}
-        </button>
-      </div>
-
-      {/* Show-once modal block */}
-      {freshKey && (
-        <div className="mb-5 p-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--fill)]">
-          <p className="text-xs font-medium text-[var(--ink)] mb-1.5">
-            Copy your key now — it will never be shown again.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 min-w-0 text-[11px] font-mono text-[var(--accent-fg)] bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-2 break-all select-all">
-              {freshKey}
-            </code>
-            <button onClick={() => copy(freshKey)} className={btnCls}>
-              Copy
-            </button>
-            <button
-              onClick={() => setFreshKey(null)}
-              className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] px-2"
-            >
-              Done
-            </button>
+      <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {FEATURES.map(([label, d]) => (
+          <div key={label} className="flex items-center gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--fill)] px-3.5 py-3">
+            <svg className="w-4 h-4 text-[var(--accent-fg)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
+            <span className="text-sm text-[var(--ink-2)]">{label}</span>
           </div>
-        </div>
-      )}
-
-      {/* Key list */}
-      {loading ? (
-        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
-      ) : active.length === 0 ? (
-        <p className="text-xs text-[var(--ink-4)] mb-5">No active keys yet — create one above.</p>
-      ) : (
-        <div className="space-y-2 mb-6">
-          {active.map((k) => (
-            <div
-              key={k.id}
-              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-[var(--line)] bg-[var(--fill)]"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--ink)] truncate">{k.name}</p>
-                <p className="text-[11px] font-mono text-[var(--ink-4)]">
-                  {k.prefix} · {k.usage_count} requests · {k.total_tokens} tokens
-                  {k.last_used_at ? ` · last used ${new Date(k.last_used_at).toLocaleDateString()}` : ''}
-                </p>
-              </div>
-              <button
-                onClick={() => setRevokeId(k.id)}
-                className="text-xs font-medium text-red-400 hover:text-red-300 flex-shrink-0"
-              >
-                Revoke
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Quick start */}
-      <div className="pt-4 border-t border-[var(--line)]">
-        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <p className="text-xs font-semibold text-[var(--ink)]">Quick start (OpenAI-compatible)</p>
-          <div className="flex flex-wrap gap-1">
-            {QS_SNIPPETS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setQsLang(s.id)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${
-                  qsLang === s.id
-                    ? 'bg-[var(--fill-strong)] text-[var(--ink)]'
-                    : 'text-[var(--ink-3)] hover:text-[var(--ink-2)] hover:bg-[var(--fill)]'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="relative">
-          <pre className="text-[11px] font-mono text-[var(--ink-2)] bg-[var(--base)] border border-[var(--line)] rounded-xl p-3 overflow-x-auto whitespace-pre">
-            {qsActive.code}
-          </pre>
-          <button
-            onClick={() => copy(qsActive.code)}
-            className="absolute top-2 right-2 text-[10px] font-medium rounded-md border border-[var(--line)] bg-[var(--fill)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)]"
-          >
-            Copy
-          </button>
-        </div>
-        <p className="text-[11px] text-[var(--ink-4)] mt-2">
-          Models: <code className="font-mono">close-chat</code> (fast general chat) ·{' '}
-          <code className="font-mono">close-code</code> (strongest coder). Streaming is supported.
-        </p>
+        ))}
       </div>
-
-      {revokeId !== null && (
-        <ConfirmModal
-          title="Revoke key"
-          message="Apps using this key will stop working immediately. This can't be undone."
-          confirmLabel="Revoke"
-          danger
-          onConfirm={() => {
-            revokeApiKey(revokeId)
-              .then(() => {
-                toast.success('Key revoked');
-                refresh();
-              })
-              .catch(() => toast.error('Could not revoke the key.'));
-            setRevokeId(null);
-          }}
-          onClose={() => setRevokeId(null)}
-        />
-      )}
 
       {consoleOpen && <DeveloperConsole onClose={() => setConsoleOpen(false)} />}
     </>

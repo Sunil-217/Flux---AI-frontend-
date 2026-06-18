@@ -767,7 +767,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
               )}
             </div>
           ) : (
-            <div key={kb.key_id} className="max-w-3xl animate-fade-in">
+            <div key={kb.key_id} className="w-full animate-fade-in">
               {/* App header */}
               <div className="flex items-start justify-between gap-3 mb-6">
                 <div className="flex items-center gap-3 min-w-0">
