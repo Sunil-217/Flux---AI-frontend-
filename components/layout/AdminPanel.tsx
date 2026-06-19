@@ -17,6 +17,12 @@ import {
   adminUserApiKeys,
   adminRevokeApiKey,
   adminDeleteApiKey,
+  adminListApps,
+  adminAppsSummary,
+  adminAppDocuments,
+  adminAppActivity,
+  adminSetAppPlan,
+  adminDeleteAppDocument,
   adminListBroadcasts,
   adminCreateBroadcast,
   adminSetBroadcastActive,
@@ -37,6 +43,11 @@ import {
   type AdminUser,
   type AdminAuditEntry,
   type AdminApiKey,
+  type AdminApp,
+  type AdminAppsSummary,
+  type AdminAppDocuments,
+  type AdminAppActivity,
+  type AdminAppPlanCount,
   type AdminBroadcast,
   type BroadcastLevel,
   type AdminInvite,
@@ -46,7 +57,7 @@ import {
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
+type Tab = 'dashboard' | 'users' | 'apps' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -60,7 +71,7 @@ function fmt(n: number): string {
 // The backend stores naive UTC timestamps (datetime.utcnow) and serialises them
 // with no timezone marker. JS would otherwise read them as LOCAL time and be off
 // by the user's UTC offset — so append 'Z' to force UTC, then convert to local.
-function parseUTC(iso: string | null): Date | null {
+function parseUTC(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
   const d = new Date(hasTz ? iso : `${iso}Z`);
@@ -68,7 +79,7 @@ function parseUTC(iso: string | null): Date | null {
 }
 
 /** Full local date + time, e.g. "13 Jun 2026, 10:04 PM". */
-function fmtDateTime(iso: string | null): string {
+function fmtDateTime(iso: string | null | undefined): string {
   const d = parseUTC(iso);
   if (!d) return '—';
   return d.toLocaleString(undefined, {
@@ -82,7 +93,7 @@ function fmtDateTime(iso: string | null): string {
 }
 
 /** Short relative label, e.g. "6h ago" — shown as a hover hint alongside the date. */
-function timeAgo(iso: string | null): string {
+function timeAgo(iso: string | null | undefined): string {
   const d = parseUTC(iso);
   if (!d) return '';
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
@@ -949,6 +960,564 @@ function Toggle({
   );
 }
 
+// ── Developers (apps) ─────────────────────────────────────────────────────────
+function fmtBytes(n: number): string {
+  if (!n) return '0 B';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const PLAN_PILL: Record<string, string> = {
+  free: 'text-[var(--ink-3)] bg-[var(--fill-strong)]',
+  go: 'text-sky-400 bg-sky-400/10',
+  pro: 'text-violet-400 bg-violet-400/10',
+  max: 'text-amber-400 bg-amber-400/10',
+  enterprise: 'text-emerald-400 bg-emerald-400/10',
+};
+const planPill = (plan: string) => PLAN_PILL[plan] ?? PLAN_PILL.free;
+
+const STATIC_PLANS: { key: string; label: string }[] = [
+  { key: 'free', label: 'Free' },
+  { key: 'go', label: 'Go' },
+  { key: 'pro', label: 'Pro' },
+  { key: 'max', label: 'Max' },
+  { key: 'enterprise', label: 'Enterprise' },
+];
+
+const APP_ICON = {
+  apps: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+  ),
+  doc: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" /></svg>
+  ),
+};
+
+function AppCard({
+  app,
+  plans,
+  expanded,
+  onToggle,
+  onPatched,
+  onRemoved,
+  onRefresh,
+}: {
+  app: AdminApp;
+  plans: { key: string; label: string }[];
+  expanded: boolean;
+  onToggle: () => void;
+  onPatched: (a: AdminApp) => void;
+  onRemoved: (id: number) => void;
+  onRefresh: () => void;
+}) {
+  const [docs, setDocs] = useState<AdminAppDocuments | null>(null);
+  const [activity, setActivity] = useState<AdminAppActivity | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<
+    { kind: 'revoke' | 'delete' | 'doc'; docId?: number; filename?: string } | null
+  >(null);
+
+  const actionBtn =
+    'text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+
+  useEffect(() => {
+    if (expanded && docs === null) {
+      setLoading(true);
+      Promise.all([adminAppDocuments(app.id), adminAppActivity(app.id)])
+        .then(([d, a]) => {
+          setDocs(d);
+          setActivity(a);
+        })
+        .catch((e) => toast.error(apiError(e, 'Could not load app details.')))
+        .finally(() => setLoading(false));
+    }
+  }, [expanded, app.id, docs]);
+
+  const changePlan = async (newPlan: string) => {
+    if (newPlan === app.plan) return;
+    setBusy(true);
+    try {
+      const updated = await adminSetAppPlan(app.id, newPlan);
+      onPatched(updated);
+      toast.success(`Plan set to ${updated.plan_label}`);
+      onRefresh();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not change plan.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRevoke = async () => {
+    setBusy(true);
+    try {
+      await adminRevokeApiKey(app.id);
+      onPatched({ ...app, revoked: true });
+      toast.success('Key revoked');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not revoke key.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    setBusy(true);
+    try {
+      await adminDeleteApiKey(app.id);
+      onRemoved(app.id);
+      toast.success('App deleted');
+      onRefresh();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not delete app.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteDoc = async (docId: number) => {
+    setBusy(true);
+    try {
+      await adminDeleteAppDocument(app.id, docId);
+      setDocs((d) => (d ? { ...d, documents: d.documents.filter((x) => x.id !== docId) } : d));
+      onPatched({ ...app, doc_count: Math.max(0, app.doc_count - 1) });
+      toast.success('Document deleted');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not delete document.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleOwnerBlock = async () => {
+    const blocking = !app.owner_api_blocked;
+    setBusy(true);
+    try {
+      await adminUpdateUser(app.owner_id, { api_blocked: blocking });
+      // Blocking an owner also revokes all their keys server-side.
+      onPatched({ ...app, owner_api_blocked: blocking, revoked: blocking ? true : app.revoked });
+      toast.success(blocking ? 'Owner API access blocked' : 'Owner API access restored');
+      onRefresh();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not update owner.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const limitLabel = app.doc_limit >= 100000 ? '∞' : String(app.doc_limit);
+
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--fill)] overflow-hidden">
+      {/* Row */}
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <button onClick={onToggle} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <svg
+            className={`w-4 h-4 flex-shrink-0 text-[var(--ink-4)] transition-transform ${expanded ? 'rotate-90' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium text-[var(--ink)] truncate">{app.name}</p>
+              <span className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${planPill(app.plan)}`}>
+                {app.plan_label}
+              </span>
+              {app.revoked && <Badge tone="banned">Revoked</Badge>}
+              {app.owner_api_blocked && <Badge tone="api">Owner blocked</Badge>}
+            </div>
+            <p className="text-[11px] text-[var(--ink-4)] truncate mt-0.5">
+              {app.owner_email ?? 'unknown owner'} · <span className="font-mono">{app.prefix}</span>
+            </p>
+          </div>
+        </button>
+        <div className="hidden sm:flex items-center gap-5 flex-shrink-0 text-right">
+          <div>
+            <p className={`text-sm font-semibold tabular-nums ${app.near_limit ? 'text-amber-400' : 'text-[var(--ink)]'}`}>
+              {app.doc_count}/{limitLabel}
+            </p>
+            <p className="text-[10px] text-[var(--ink-4)]">docs</p>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[var(--ink)] tabular-nums">{fmt(app.usage_count)}</p>
+            <p className="text-[10px] text-[var(--ink-4)]">calls</p>
+          </div>
+          <div className="w-16">
+            <p className="text-[11px] text-[var(--ink-3)]" title={fmtDateTime(app.last_used_at)}>
+              {app.last_used_at ? timeAgo(app.last_used_at) : 'never'}
+            </p>
+            <p className="text-[10px] text-[var(--ink-4)]">last use</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Drawer */}
+      {expanded && (
+        <div className="border-t border-[var(--line)] bg-[var(--base)]/40 px-3.5 py-3.5 space-y-4">
+          {/* Toolbar: plan + actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] uppercase tracking-wide text-[var(--ink-4)]">Plan</span>
+            <select
+              value={app.plan}
+              disabled={busy}
+              onChange={(e) => changePlan(e.target.value)}
+              className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)] disabled:opacity-40"
+            >
+              {plans.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <span className="flex-1" />
+            {app.widget_token && !app.revoked && (
+              <a
+                href={`/embed/chat?app=${app.widget_token}`}
+                target="_blank"
+                rel="noreferrer"
+                className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--fill)]`}
+              >
+                Preview widget ↗
+              </a>
+            )}
+            <button
+              disabled={busy}
+              onClick={toggleOwnerBlock}
+              className={`${actionBtn} ${
+                app.owner_api_blocked
+                  ? 'border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/10'
+                  : 'border-orange-400/40 text-orange-400 hover:bg-orange-400/10'
+              }`}
+            >
+              {app.owner_api_blocked ? 'Unblock owner' : 'Block owner API'}
+            </button>
+            {!app.revoked && (
+              <button
+                disabled={busy}
+                onClick={() => setConfirm({ kind: 'revoke' })}
+                className={`${actionBtn} border-amber-400/40 text-amber-400 hover:bg-amber-400/10`}
+              >
+                Revoke
+              </button>
+            )}
+            <button
+              disabled={busy}
+              onClick={() => setConfirm({ kind: 'delete' })}
+              className={`${actionBtn} border-red-400/40 text-red-400 hover:bg-red-400/10`}
+            >
+              Delete app
+            </button>
+          </div>
+
+          {loading ? (
+            <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Documents */}
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">
+                  Documents ({docs?.documents.length ?? 0}/{limitLabel})
+                </p>
+                {!docs || docs.documents.length === 0 ? (
+                  <p className="text-xs text-[var(--ink-4)]">No documents uploaded.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {docs.documents.map((d) => (
+                      <div
+                        key={d.id}
+                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-[var(--line)] bg-[var(--fill)]"
+                      >
+                        <svg className="w-4 h-4 flex-shrink-0 text-[var(--ink-4)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.4a2 2 0 00-.6-1.4l-3.4-3.4a2 2 0 00-1.4-.6H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-[var(--ink)] truncate">{d.filename}</p>
+                          <p className="text-[10px] text-[var(--ink-4)]">
+                            {fmtBytes(d.file_size)} · {d.chunk_count} chunks · {fmtDateTime(d.uploaded_at)}
+                          </p>
+                        </div>
+                        <button
+                          disabled={busy}
+                          onClick={() => setConfirm({ kind: 'doc', docId: d.id, filename: d.filename })}
+                          className="text-[var(--ink-4)] hover:text-red-400 transition-colors flex-shrink-0 disabled:opacity-40"
+                          title="Delete document"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.9 12a2 2 0 01-2 1.9H7.9a2 2 0 01-2-1.9L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Activity */}
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">Activity</p>
+                {!activity || activity.events.length === 0 ? (
+                  <p className="text-xs text-[var(--ink-4)]">No activity yet.</p>
+                ) : (
+                  <ol className="space-y-2.5">
+                    {activity.events.map((ev, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-[var(--ink-2)] truncate">{ev.label}</p>
+                          {ev.detail && <p className="text-[10px] text-[var(--ink-4)]">{ev.detail}</p>}
+                        </div>
+                        <span className="text-[10px] text-[var(--ink-4)] flex-shrink-0" title={fmtDateTime(ev.at)}>
+                          {ev.at ? timeAgo(ev.at) : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div className="mt-3 pt-3 border-t border-[var(--line)] grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--ink)] tabular-nums">{fmtBytes(app.total_size)}</p>
+                    <p className="text-[10px] text-[var(--ink-4)]">storage</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--ink)] tabular-nums">{fmt(app.usage_count)}</p>
+                    <p className="text-[10px] text-[var(--ink-4)]">API calls</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--ink)] tabular-nums">{fmt(app.total_tokens)}</p>
+                    <p className="text-[10px] text-[var(--ink-4)]">tokens</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          title={confirm.kind === 'doc' ? 'Delete document?' : confirm.kind === 'revoke' ? 'Revoke this key?' : 'Delete this app?'}
+          message={
+            confirm.kind === 'doc'
+              ? `“${confirm.filename}” will be permanently removed from this app's knowledge base.`
+              : confirm.kind === 'revoke'
+                ? `Apps using ${app.prefix} stop working immediately. The row is kept for audit.`
+                : `${app.name} (${app.prefix}) and all its documents will be permanently deleted.`
+          }
+          confirmLabel={confirm.kind === 'revoke' ? 'Revoke' : 'Delete'}
+          danger
+          onConfirm={() => {
+            const c = confirm;
+            setConfirm(null);
+            if (c.kind === 'doc' && c.docId != null) deleteDoc(c.docId);
+            else if (c.kind === 'revoke') doRevoke();
+            else if (c.kind === 'delete') doDelete();
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AppsTab() {
+  const [summary, setSummary] = useState<AdminAppsSummary | null>(null);
+  const [apps, setApps] = useState<AdminApp[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [plan, setPlan] = useState('');
+  const [status, setStatus] = useState<'all' | 'active' | 'revoked'>('all');
+  const [sort, setSort] = useState<'recent' | 'usage' | 'docs' | 'created'>('recent');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadSummary = useCallback(() => {
+    adminAppsSummary()
+      .then(setSummary)
+      .catch(() => {});
+  }, []);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminListApps({ q: query.trim(), plan, status, sort, limit: 300 })
+      .then((r) => {
+        setApps(r.apps);
+        setTotal(r.total);
+      })
+      .catch((e) => toast.error(apiError(e, 'Could not load developer apps.')))
+      .finally(() => setLoading(false));
+  }, [query, plan, status, sort]);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  useEffect(() => {
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(load, 300);
+    return () => {
+      if (debounce.current) clearTimeout(debounce.current);
+    };
+  }, [load]);
+
+  const refresh = useCallback(() => {
+    load();
+    loadSummary();
+  }, [load, loadSummary]);
+
+  const patchApp = (next: AdminApp) => setApps((prev) => prev.map((a) => (a.id === next.id ? next : a)));
+  const removeApp = (id: number) => setApps((prev) => prev.filter((a) => a.id !== id));
+
+  const planOptions = (summary?.plans as AdminAppPlanCount[] | undefined)?.map((p) => ({ key: p.key, label: p.label })) ?? STATIC_PLANS;
+
+  const exportCsv = () => {
+    const header = ['owner_email', 'owner_name', 'app_name', 'prefix', 'plan', 'docs', 'doc_limit', 'size_bytes', 'api_calls', 'tokens', 'status', 'created_at', 'last_used_at'];
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = apps.map((a) => [
+      a.owner_email ?? '', a.owner_name ?? '', a.name, a.prefix, a.plan, a.doc_count, a.doc_limit,
+      a.total_size, a.usage_count, a.total_tokens, a.revoked ? 'revoked' : 'active', a.created_at ?? '', a.last_used_at ?? '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `close-ai-developers-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${apps.length} app${apps.length === 1 ? '' : 's'}`);
+  };
+
+  return (
+    <>
+      <div className="mb-4">
+        <h3 className={headingCls}>Developers</h3>
+        <p className={subCls}>Every developer app (API key) and its knowledge base.</p>
+      </div>
+
+      {/* Summary KPIs */}
+      {summary && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+            <KpiCard icon={APP_ICON.apps} label="Apps" value={fmt(summary.total_apps)} hint={`${summary.active_apps} active`} accent />
+            <KpiCard icon={DASH_ICON.users} label="Developers" value={fmt(summary.developers)} />
+            <KpiCard icon={APP_ICON.doc} label="Documents" value={fmt(summary.total_docs)} hint={fmtBytes(summary.total_size)} />
+            <KpiCard icon={DASH_ICON.key} label="API calls" value={fmt(summary.api_calls)} />
+          </div>
+          {/* Plan breakdown */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            {summary.plans.map((p) => (
+              <span key={p.key} className={`text-[11px] font-medium rounded-full px-2.5 py-1 ${planPill(p.key)}`}>
+                {p.label} · {p.count}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Search */}
+      <div className="relative mb-3">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ink-4)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" />
+          <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+        </svg>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by owner email, name, or app…"
+          className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg pl-9 pr-3 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+        />
+      </div>
+
+      {/* Filters + export */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex gap-0.5 rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
+          {(['all', 'active', 'revoked'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`px-2.5 py-1 rounded-md text-xs capitalize transition-colors ${
+                status === s ? 'bg-[var(--fill-strong)] text-[var(--ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <select
+          value={plan}
+          onChange={(e) => setPlan(e.target.value)}
+          className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="">All plans</option>
+          {planOptions.map((p) => (
+            <option key={p.key} value={p.key}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          className="bg-[var(--base)] border border-[var(--line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="recent">Newest</option>
+          <option value="created">Oldest</option>
+          <option value="usage">Most used</option>
+          <option value="docs">Most docs</option>
+        </select>
+        <span className="flex-1" />
+        <button
+          onClick={exportCsv}
+          disabled={apps.length === 0}
+          className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--fill)] transition-colors disabled:opacity-40"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading apps…</p>
+      ) : apps.length === 0 ? (
+        <p className="text-sm text-[var(--ink-4)] py-8 text-center">No developer apps match.</p>
+      ) : (
+        <div className="space-y-2">
+          {apps.map((a) => (
+            <AppCard
+              key={a.id}
+              app={a}
+              plans={planOptions}
+              expanded={expandedId === a.id}
+              onToggle={() => setExpandedId((id) => (id === a.id ? null : a.id))}
+              onPatched={patchApp}
+              onRemoved={removeApp}
+              onRefresh={refresh}
+            />
+          ))}
+          <p className="text-[11px] text-[var(--ink-4)] text-center pt-2">
+            Showing {apps.length} of {total} app{total === 1 ? '' : 's'}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
 function FeaturesTab() {
   const { refresh } = useFeatures();
   const [map, setMap] = useState<FeatureMap>({});
@@ -1785,6 +2354,10 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
     );
+  if (key === 'apps')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+    );
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
   );
@@ -1806,6 +2379,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   const nav: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Users' },
+    { key: 'apps', label: 'Developers' },
     { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
     { key: 'webhooks', label: 'Webhooks' },
@@ -1863,6 +2437,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
         <div key={tab} className="animate-fade-in flex-1 min-w-0 overflow-y-auto scroll-smooth px-5 md:px-8 py-6 md:py-7">
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
+          {tab === 'apps' && <AppsTab />}
           {tab === 'broadcast' && <BroadcastTab />}
           {tab === 'invites' && <InvitesTab />}
           {tab === 'webhooks' && <WebhooksTab />}

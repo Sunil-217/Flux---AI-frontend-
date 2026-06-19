@@ -734,6 +734,127 @@ export async function adminDeleteApiKey(keyId: number): Promise<void> {
   await client.delete(`/admin/api-keys/${keyId}`);
 }
 
+// ── Developer apps (super-admin: every ck_ key across all users + its KB) ──
+export interface AdminApp {
+  id: number;
+  name: string;
+  prefix: string;
+  plan: string;
+  plan_label: string;
+  doc_count: number;
+  doc_limit: number;
+  near_limit: boolean; // at/over the plan's document limit
+  total_size: number; // bytes across all uploaded docs
+  usage_count: number;
+  total_tokens: number;
+  revoked: boolean;
+  widget_token: string | null;
+  created_at?: string | null;
+  last_used_at?: string | null;
+  owner_id: number;
+  owner_email: string | null;
+  owner_name: string | null;
+  owner_api_blocked: boolean;
+  owner_banned: boolean;
+}
+
+export interface AdminAppPlanCount {
+  key: string;
+  label: string;
+  price: string;
+  count: number;
+}
+
+export interface AdminAppsSummary {
+  total_apps: number;
+  active_apps: number;
+  revoked_apps: number;
+  developers: number;
+  total_docs: number;
+  total_size: number;
+  api_calls: number;
+  plans: AdminAppPlanCount[];
+}
+
+export interface AdminAppDocument {
+  id: number;
+  filename: string;
+  file_size: number;
+  chunk_count: number;
+  uploaded_at: string | null;
+}
+
+export interface AdminAppDocuments {
+  key_id: number;
+  name: string;
+  plan: string;
+  plan_label: string;
+  doc_limit: number;
+  owner_email: string | null;
+  documents: AdminAppDocument[];
+}
+
+export interface AdminAppActivityEvent {
+  type: string;
+  label: string;
+  at: string | null;
+  detail?: string | null;
+}
+
+export interface AdminAppActivity {
+  key_id: number;
+  events: AdminAppActivityEvent[];
+  footprint: {
+    plan: string;
+    plan_label: string;
+    doc_count: number;
+    doc_limit: number;
+    total_size: number;
+    usage_count: number;
+    total_tokens: number;
+  };
+}
+
+export interface AdminListAppsParams {
+  q?: string;
+  plan?: string;
+  status?: 'all' | 'active' | 'revoked';
+  sort?: 'recent' | 'created' | 'usage' | 'docs';
+  limit?: number;
+  offset?: number;
+}
+
+export async function adminListApps(
+  params: AdminListAppsParams = {}
+): Promise<{ total: number; apps: AdminApp[] }> {
+  const res = await client.get<{ total: number; apps: AdminApp[] }>('/admin/apps', { params });
+  return { total: res.data.total ?? 0, apps: res.data.apps ?? [] };
+}
+
+export async function adminAppsSummary(): Promise<AdminAppsSummary> {
+  const res = await client.get<AdminAppsSummary>('/admin/apps/summary');
+  return res.data;
+}
+
+export async function adminAppDocuments(keyId: number): Promise<AdminAppDocuments> {
+  const res = await client.get<AdminAppDocuments>(`/admin/api-keys/${keyId}/documents`);
+  return res.data;
+}
+
+export async function adminAppActivity(keyId: number): Promise<AdminAppActivity> {
+  const res = await client.get<AdminAppActivity>(`/admin/api-keys/${keyId}/activity`);
+  return res.data;
+}
+
+export async function adminSetAppPlan(keyId: number, plan: string): Promise<AdminApp> {
+  const res = await client.patch<AdminApp>(`/admin/api-keys/${keyId}`, { plan });
+  return res.data;
+}
+
+export async function adminDeleteAppDocument(keyId: number, docId: number): Promise<void> {
+  await client.delete(`/admin/api-keys/${keyId}/documents/${docId}`);
+}
+
 // ── Feature flags ──
 export type FeatureMap = Record<string, boolean>;
 
