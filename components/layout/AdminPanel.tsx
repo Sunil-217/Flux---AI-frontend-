@@ -23,6 +23,10 @@ import {
   adminAppActivity,
   adminSetAppPlan,
   adminDeleteAppDocument,
+  adminListPlans,
+  adminCreatePlan,
+  adminUpdatePlan,
+  adminDeletePlan,
   adminListBroadcasts,
   adminCreateBroadcast,
   adminSetBroadcastActive,
@@ -48,6 +52,9 @@ import {
   type AdminAppDocuments,
   type AdminAppActivity,
   type AdminAppPlanCount,
+  type AdminPlan,
+  type AdminPlanInput,
+  type AdminPlanPatch,
   type AdminBroadcast,
   type BroadcastLevel,
   type AdminInvite,
@@ -57,7 +64,7 @@ import {
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'apps' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
+type Tab = 'dashboard' | 'users' | 'apps' | 'plans' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -1518,6 +1525,389 @@ function AppsTab() {
   );
 }
 
+// ── Plans ─────────────────────────────────────────────────────────────────────
+const BLANK_PLAN: AdminPlanInput = {
+  key: '', label: '', price: '₹0', doc_limit: 1, rate_limit: 20,
+  blurb: '', features: [], highlighted: false, active: true,
+};
+
+const planInputCls =
+  'bg-[var(--base)] border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors w-full';
+const planFieldLabel = 'text-[10px] font-medium uppercase tracking-wide text-[var(--ink-4)]';
+
+function CheckIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function PlanEditorCard({
+  plan, busy, isFirst, isLast, onSave, onDelete, onMove,
+}: {
+  plan: AdminPlan;
+  busy: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onSave: (key: string, patch: AdminPlanPatch) => void;
+  onDelete: (plan: AdminPlan) => void;
+  onMove: (plan: AdminPlan, dir: -1 | 1) => void;
+}) {
+  const [label, setLabel] = useState(plan.label);
+  const [price, setPrice] = useState(plan.price);
+  const [docLimit, setDocLimit] = useState(String(plan.doc_limit));
+  const [rateLimit, setRateLimit] = useState(String(plan.rate_limit));
+  const [blurb, setBlurb] = useState(plan.blurb);
+  const [features, setFeatures] = useState<string[]>(plan.features);
+  const [highlighted, setHighlighted] = useState(plan.highlighted);
+  const [active, setActive] = useState(plan.active);
+
+  // Re-sync the draft whenever the saved plan changes (after save / reorder reload).
+  useEffect(() => {
+    setLabel(plan.label); setPrice(plan.price); setDocLimit(String(plan.doc_limit));
+    setRateLimit(String(plan.rate_limit)); setBlurb(plan.blurb);
+    setFeatures(plan.features); setHighlighted(plan.highlighted); setActive(plan.active);
+  }, [plan]);
+
+  const cleanFeatures = features.map((f) => f.trim()).filter(Boolean);
+  const dirty =
+    label !== plan.label ||
+    price !== plan.price ||
+    Number(docLimit || 0) !== plan.doc_limit ||
+    Number(rateLimit || 0) !== plan.rate_limit ||
+    blurb !== plan.blurb ||
+    highlighted !== plan.highlighted ||
+    active !== plan.active ||
+    JSON.stringify(cleanFeatures) !== JSON.stringify(plan.features);
+
+  const save = () =>
+    onSave(plan.key, {
+      label,
+      price,
+      doc_limit: Math.max(0, parseInt(docLimit || '0', 10) || 0),
+      rate_limit: Math.max(1, parseInt(rateLimit || '1', 10) || 1),
+      blurb,
+      features: cleanFeatures,
+      highlighted,
+      active,
+    });
+
+  const iconBtn =
+    'p-1.5 rounded-md border border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--fill)] hover:text-[var(--ink)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        highlighted
+          ? 'border-[var(--accent)]/50 bg-gradient-to-br from-[var(--accent)]/10 to-transparent'
+          : 'border-[var(--line)] bg-[var(--fill)]'
+      } ${!active ? 'opacity-60' : ''}`}
+    >
+      {/* Header */}
+      <div className="flex items-start gap-2 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="bg-transparent text-base font-semibold text-[var(--ink)] outline-none border-b border-transparent focus:border-[var(--accent)] max-w-[150px]"
+            />
+            <span className="text-[10px] font-mono text-[var(--ink-4)] bg-[var(--fill-strong)] rounded px-1.5 py-0.5">{plan.key}</span>
+          </div>
+          <p className="text-[11px] text-[var(--ink-4)] mt-1">
+            {plan.app_count} app{plan.app_count === 1 ? '' : 's'} on this plan
+          </p>
+        </div>
+        <button
+          onClick={() => setHighlighted((h) => !h)}
+          title="Mark as most popular"
+          className={`p-1.5 rounded-md transition-colors ${highlighted ? 'text-amber-400' : 'text-[var(--ink-4)] hover:text-[var(--ink-2)]'}`}
+        >
+          <svg className="w-4 h-4" fill={highlighted ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.5l2.3 4.66 5.14.75-3.72 3.62.88 5.12L11.48 15.9 6.9 17.65l.88-5.12L4.05 8.9l5.14-.75 2.29-4.66z" />
+          </svg>
+        </button>
+        <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink-3)] cursor-pointer select-none mt-1">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-[var(--accent)]" />
+          Active
+        </label>
+      </div>
+
+      {/* Price + limits */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <div>
+          <label className={planFieldLabel}>Price</label>
+          <input value={price} onChange={(e) => setPrice(e.target.value)} className={planInputCls} placeholder="₹0" />
+        </div>
+        <div>
+          <label className={planFieldLabel}>Doc limit</label>
+          <input
+            value={docLimit}
+            onChange={(e) => setDocLimit(e.target.value.replace(/[^0-9]/g, ''))}
+            className={planInputCls}
+            inputMode="numeric"
+            title="Use a large number (e.g. 100000) for unlimited"
+          />
+        </div>
+        <div>
+          <label className={planFieldLabel}>API / min</label>
+          <input
+            value={rateLimit}
+            onChange={(e) => setRateLimit(e.target.value.replace(/[^0-9]/g, ''))}
+            className={planInputCls}
+            inputMode="numeric"
+          />
+        </div>
+      </div>
+
+      {/* Tagline */}
+      <div className="mb-3">
+        <label className={planFieldLabel}>Tagline</label>
+        <input value={blurb} onChange={(e) => setBlurb(e.target.value)} className={planInputCls} placeholder="Short pricing-card description" />
+      </div>
+
+      {/* Services */}
+      <div className="mb-3">
+        <label className={planFieldLabel}>Services included</label>
+        <div className="space-y-1.5 mt-1.5">
+          {features.map((f, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <CheckIcon />
+              <input
+                value={f}
+                onChange={(e) => setFeatures((fs) => fs.map((x, j) => (j === i ? e.target.value : x)))}
+                className={`${planInputCls} py-1.5`}
+                placeholder="e.g. 10 knowledge-base documents"
+              />
+              <button
+                onClick={() => setFeatures((fs) => fs.filter((_, j) => j !== i))}
+                className="text-[var(--ink-4)] hover:text-red-400 transition-colors flex-shrink-0"
+                title="Remove service"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          ))}
+          <button onClick={() => setFeatures((fs) => [...fs, ''])} className="text-xs font-medium text-[var(--accent-fg)] hover:underline">
+            + Add service
+          </button>
+        </div>
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex items-center gap-1.5 pt-3 border-t border-[var(--line)]">
+        <button disabled={busy || isFirst} onClick={() => onMove(plan, -1)} title="Move up" className={iconBtn}>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+        </button>
+        <button disabled={busy || isLast} onClick={() => onMove(plan, 1)} title="Move down" className={iconBtn}>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+        </button>
+        <span className="flex-1" />
+        <button
+          disabled={busy || plan.key === 'free'}
+          onClick={() => onDelete(plan)}
+          title={plan.key === 'free' ? 'The Free plan is the default tier and cannot be deleted' : 'Delete plan'}
+          className="text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          Delete
+        </button>
+        <button
+          disabled={busy || !dirty}
+          onClick={save}
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {dirty ? 'Save changes' : 'Saved'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PlansTab() {
+  const [plans, setPlans] = useState<AdminPlan[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<AdminPlan | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<AdminPlanInput>(BLANK_PLAN);
+
+  const load = useCallback(() => {
+    adminListPlans()
+      .then(setPlans)
+      .catch((e) => toast.error(apiError(e, 'Could not load plans.')));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async (key: string, patch: AdminPlanPatch) => {
+    setBusy(true);
+    try {
+      const updated = await adminUpdatePlan(key, patch);
+      setPlans((ps) => (ps ? ps.map((p) => (p.key === key ? updated : p)) : ps));
+      toast.success(`${updated.label} saved`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not save plan.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (plan: AdminPlan) => {
+    setBusy(true);
+    try {
+      await adminDeletePlan(plan.key);
+      setPlans((ps) => (ps ? ps.filter((p) => p.key !== plan.key) : ps));
+      toast.success(`${plan.label} plan deleted`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not delete plan.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const move = async (plan: AdminPlan, dir: -1 | 1) => {
+    if (!plans) return;
+    const idx = plans.findIndex((p) => p.key === plan.key);
+    const swap = idx + dir;
+    if (swap < 0 || swap >= plans.length) return;
+    const other = plans[swap];
+    setBusy(true);
+    try {
+      await Promise.all([
+        adminUpdatePlan(plan.key, { sort_order: other.sort_order }),
+        adminUpdatePlan(other.key, { sort_order: plan.sort_order }),
+      ]);
+      load();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not reorder plans.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const create = async () => {
+    if (!draft.key.trim() || !draft.label.trim()) {
+      toast.error('Plan key and name are required.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await adminCreatePlan({ ...draft, features: draft.features.map((f) => f.trim()).filter(Boolean) });
+      setPlans((ps) => (ps ? [...ps, created] : [created]));
+      setAdding(false);
+      setDraft(BLANK_PLAN);
+      toast.success(`${created.label} plan created`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not create plan.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className={headingCls}>Plans</h3>
+          <p className={subCls}>Set each tier&apos;s price and the services it provides. Doc limits &amp; API rate limits are enforced live.</p>
+        </div>
+        {!adding && (
+          <button
+            onClick={() => { setDraft(BLANK_PLAN); setAdding(true); }}
+            className="flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m7-7H5" /></svg>
+            New plan
+          </button>
+        )}
+      </div>
+
+      {/* New-plan form */}
+      {adding && (
+        <div className="rounded-2xl border border-[var(--accent)]/40 bg-[var(--fill)] p-4 mb-4">
+          <p className="text-sm font-semibold text-[var(--ink)] mb-3">New plan</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+            <div>
+              <label className={planFieldLabel}>Key (id)</label>
+              <input value={draft.key} onChange={(e) => setDraft((d) => ({ ...d, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} className={planInputCls} placeholder="team" />
+            </div>
+            <div>
+              <label className={planFieldLabel}>Name</label>
+              <input value={draft.label} onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))} className={planInputCls} placeholder="Team" />
+            </div>
+            <div>
+              <label className={planFieldLabel}>Price</label>
+              <input value={draft.price} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))} className={planInputCls} placeholder="₹2,999/mo" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={planFieldLabel}>Docs</label>
+                <input value={String(draft.doc_limit)} onChange={(e) => setDraft((d) => ({ ...d, doc_limit: parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) }))} className={planInputCls} inputMode="numeric" />
+              </div>
+              <div>
+                <label className={planFieldLabel}>API/min</label>
+                <input value={String(draft.rate_limit)} onChange={(e) => setDraft((d) => ({ ...d, rate_limit: parseInt(e.target.value.replace(/[^0-9]/g, '') || '0', 10) }))} className={planInputCls} inputMode="numeric" />
+              </div>
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className={planFieldLabel}>Tagline</label>
+            <input value={draft.blurb} onChange={(e) => setDraft((d) => ({ ...d, blurb: e.target.value }))} className={planInputCls} placeholder="Short pricing-card description" />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => { setAdding(false); setDraft(BLANK_PLAN); }} className="text-sm font-medium text-[var(--ink-3)] hover:text-[var(--ink)] px-3 py-2 rounded-lg hover:bg-[var(--fill-strong)] transition-colors">Cancel</button>
+            <button disabled={busy} onClick={create} className="text-sm font-semibold px-4 py-2 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40">Create plan</button>
+          </div>
+          <p className="text-[11px] text-[var(--ink-4)] mt-2">You can add the list of services after creating, in the plan card.</p>
+        </div>
+      )}
+
+      {/* Plan cards */}
+      {plans === null ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading plans…</p>
+      ) : plans.length === 0 ? (
+        <p className="text-sm text-[var(--ink-4)] py-8 text-center">No plans yet — create one.</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {plans.map((p, i) => (
+            <PlanEditorCard
+              key={p.key}
+              plan={p}
+              busy={busy}
+              isFirst={i === 0}
+              isLast={i === plans.length - 1}
+              onSave={save}
+              onDelete={(pl) => setConfirm(pl)}
+              onMove={move}
+            />
+          ))}
+        </div>
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          title={`Delete the ${confirm.label} plan?`}
+          message={
+            confirm.app_count > 0
+              ? `${confirm.app_count} app(s) are on this plan — you'll need to move them first, so this will be blocked.`
+              : `The ${confirm.label} plan will be permanently removed from pricing and plan options.`
+          }
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            const p = confirm;
+            setConfirm(null);
+            remove(p);
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+    </>
+  );
+}
+
 function FeaturesTab() {
   const { refresh } = useFeatures();
   const [map, setMap] = useState<FeatureMap>({});
@@ -2358,6 +2748,10 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
     );
+  if (key === 'plans')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M3 6l.5 6.5a2 2 0 00.58 1.26l6.66 6.66a2 2 0 002.83 0l5.5-5.5a2 2 0 000-2.83L12.41 5.43A2 2 0 0011 4.85L4.5 4.35A1.5 1.5 0 003 5.85V6z" /></svg>
+    );
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
   );
@@ -2380,6 +2774,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Users' },
     { key: 'apps', label: 'Developers' },
+    { key: 'plans', label: 'Plans' },
     { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
     { key: 'webhooks', label: 'Webhooks' },
@@ -2438,6 +2833,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           {tab === 'dashboard' && <DashboardTab />}
           {tab === 'users' && <UsersTab />}
           {tab === 'apps' && <AppsTab />}
+          {tab === 'plans' && <PlansTab />}
           {tab === 'broadcast' && <BroadcastTab />}
           {tab === 'invites' && <InvitesTab />}
           {tab === 'webhooks' && <WebhooksTab />}

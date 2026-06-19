@@ -855,6 +855,54 @@ export async function adminDeleteAppDocument(keyId: number, docId: number): Prom
   await client.delete(`/admin/api-keys/${keyId}/documents/${docId}`);
 }
 
+// ── Plan management (super-admin: edit pricing + services per tier) ──
+export interface AdminPlan {
+  key: string;
+  label: string;
+  price: string;
+  doc_limit: number;
+  rate_limit: number;
+  blurb: string;
+  features: string[];
+  sort_order: number;
+  active: boolean;
+  highlighted: boolean;
+  app_count: number;
+}
+
+export interface AdminPlanInput {
+  key: string;
+  label: string;
+  price: string;
+  doc_limit: number;
+  rate_limit: number;
+  blurb: string;
+  features: string[];
+  highlighted: boolean;
+  active: boolean;
+}
+
+export type AdminPlanPatch = Partial<Omit<AdminPlanInput, 'key'>> & { sort_order?: number };
+
+export async function adminListPlans(): Promise<AdminPlan[]> {
+  const res = await client.get<{ plans: AdminPlan[] }>('/admin/plans');
+  return res.data.plans ?? [];
+}
+
+export async function adminCreatePlan(input: AdminPlanInput): Promise<AdminPlan> {
+  const res = await client.post<AdminPlan>('/admin/plans', input);
+  return res.data;
+}
+
+export async function adminUpdatePlan(key: string, patch: AdminPlanPatch): Promise<AdminPlan> {
+  const res = await client.patch<AdminPlan>(`/admin/plans/${key}`, patch);
+  return res.data;
+}
+
+export async function adminDeletePlan(key: string): Promise<void> {
+  await client.delete(`/admin/plans/${key}`);
+}
+
 // ── Feature flags ──
 export type FeatureMap = Record<string, boolean>;
 
@@ -1048,6 +1096,11 @@ export interface PlanTier {
   price: string;
   doc_limit: number;
   blurb: string;
+  rate_limit?: number;
+  features?: string[];
+  highlighted?: boolean;
+  active?: boolean;
+  sort_order?: number;
 }
 
 export interface KbDocument {
