@@ -680,6 +680,9 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const cssDirty = css !== cssBaseline;
+  // Heuristic: warn devs who paste JS/JSX/HTML into the CSS-only box. Markers
+  // chosen to not false-positive on valid CSS (e.g. var(), @keyframes from{}).
+  const cssLooksLikeCode = /=>|<\/[a-zA-Z]|\bfunction\b|\bexport\b|\brequire\s*\(|from\s+["']/.test(css);
   const set = (patch: Partial<WidgetConfig>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
   const save = async () => {
@@ -877,6 +880,13 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
               {WIDGET_CSS_CLASSES.map((c) => (
                 <code key={c.cls} title={c.desc} className="text-[10px] font-mono text-[var(--ink-3)] bg-[var(--fill-strong)] rounded px-1.5 py-0.5">{c.cls}</code>
               ))}
+            </div>
+          )}
+
+          {cssLooksLikeCode && (
+            <div className="text-[11px] text-amber-300/90 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2">
+              ⚠ This looks like JavaScript/HTML, not CSS. This box styles the widget with <strong>CSS only</strong> — e.g.{' '}
+              <code className="font-mono">{'.cai-title { color: #fff; }'}</code>. Other code won&apos;t apply and will be rejected in review.
             </div>
           )}
 
