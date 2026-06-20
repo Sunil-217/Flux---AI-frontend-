@@ -27,6 +27,9 @@ import {
   adminCreatePlan,
   adminUpdatePlan,
   adminDeletePlan,
+  adminListCssReviews,
+  adminApproveCss,
+  adminRejectCss,
   adminListBroadcasts,
   adminCreateBroadcast,
   adminSetBroadcastActive,
@@ -55,6 +58,7 @@ import {
   type AdminPlan,
   type AdminPlanInput,
   type AdminPlanPatch,
+  type AdminCssReview,
   type AdminBroadcast,
   type BroadcastLevel,
   type AdminInvite,
@@ -64,7 +68,7 @@ import {
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'apps' | 'plans' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
+type Tab = 'dashboard' | 'users' | 'apps' | 'plans' | 'reviews' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -1908,6 +1912,122 @@ function PlansTab() {
   );
 }
 
+// ── Code Reviews (super-admin moderates dev-submitted widget CSS) ──────────────
+function CodeReviewsTab() {
+  const [reviews, setReviews] = useState<AdminCssReview[] | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [note, setNote] = useState('');
+
+  const load = useCallback(() => {
+    adminListCssReviews()
+      .then((r) => setReviews(r.reviews))
+      .catch((e) => toast.error(apiError(e, 'Could not load code reviews.')));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const approve = async (r: AdminCssReview) => {
+    setBusyId(r.key_id);
+    try {
+      await adminApproveCss(r.key_id);
+      setReviews((rs) => (rs ? rs.filter((x) => x.key_id !== r.key_id) : rs));
+      toast.success(`Approved — now live on “${r.app_name}”`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not approve.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reject = async (r: AdminCssReview) => {
+    setBusyId(r.key_id);
+    try {
+      await adminRejectCss(r.key_id, note.trim());
+      setReviews((rs) => (rs ? rs.filter((x) => x.key_id !== r.key_id) : rs));
+      setRejectingId(null);
+      setNote('');
+      toast.success('Rejected — developer notified.');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not reject.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="mb-4">
+        <h3 className={headingCls}>Code Reviews</h3>
+        <p className={subCls}>Developer-submitted widget CSS awaiting approval. Approved code goes live on their site; the live widget is untouched until then.</p>
+      </div>
+
+      {reviews === null ? (
+        <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+      ) : reviews.length === 0 ? (
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] py-12 text-center">
+          <svg className="w-8 h-8 mx-auto text-emerald-400/70 mb-2" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <p className="text-sm text-[var(--ink-3)]">All clear — no pending code reviews.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reviews.map((r) => (
+            <div key={r.key_id} className="rounded-xl border border-[var(--line)] bg-[var(--fill)] overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 border-b border-[var(--line)]">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--ink)] truncate">{r.app_name}</p>
+                  <p className="text-[11px] text-[var(--ink-4)] truncate">
+                    {r.owner_email ?? 'unknown'} · <span className="font-mono">{r.prefix}</span>
+                    {r.submitted_at ? <span title={fmtDateTime(r.submitted_at)}> · {timeAgo(r.submitted_at)}</span> : null}
+                  </p>
+                </div>
+                <Badge tone="api">Pending</Badge>
+              </div>
+
+              <pre className="text-[11px] font-mono text-[var(--ink-2)] bg-[var(--base)] px-3.5 py-3 overflow-x-auto max-h-56 whitespace-pre-wrap">{r.pending_css || '(empty)'}</pre>
+
+              {rejectingId === r.key_id ? (
+                <div className="px-3.5 py-3 border-t border-[var(--line)] space-y-2">
+                  <input
+                    autoFocus
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Reason for rejection (shown to the developer)"
+                    className="w-full bg-[var(--base)] border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)]"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button disabled={busyId === r.key_id} onClick={() => reject(r)} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40">
+                      Confirm reject
+                    </button>
+                    <button onClick={() => { setRejectingId(null); setNote(''); }} className="text-xs text-[var(--ink-4)] hover:text-[var(--ink)]">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3.5 py-3 border-t border-[var(--line)]">
+                  <button
+                    disabled={busyId === r.key_id}
+                    onClick={() => approve(r)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/90 text-white hover:bg-emerald-500 transition-colors disabled:opacity-40"
+                  >
+                    Approve &amp; publish
+                  </button>
+                  <button
+                    disabled={busyId === r.key_id}
+                    onClick={() => { setRejectingId(r.key_id); setNote(''); }}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-400/40 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function FeaturesTab() {
   const { refresh } = useFeatures();
   const [map, setMap] = useState<FeatureMap>({});
@@ -2752,6 +2872,10 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M3 6l.5 6.5a2 2 0 00.58 1.26l6.66 6.66a2 2 0 002.83 0l5.5-5.5a2 2 0 000-2.83L12.41 5.43A2 2 0 0011 4.85L4.5 4.35A1.5 1.5 0 003 5.85V6z" /></svg>
     );
+  if (key === 'reviews')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+    );
   return (
     <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
   );
@@ -2759,6 +2883,11 @@ const navIcon = (key: Tab) => {
 
 export function AdminPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [reviewCount, setReviewCount] = useState(0);
+
+  useEffect(() => {
+    adminListCssReviews().then((r) => setReviewCount(r.pending)).catch(() => {});
+  }, [tab]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -2775,6 +2904,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
     { key: 'users', label: 'Users' },
     { key: 'apps', label: 'Developers' },
     { key: 'plans', label: 'Plans' },
+    { key: 'reviews', label: 'Code Reviews' },
     { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
     { key: 'webhooks', label: 'Webhooks' },
@@ -2824,6 +2954,9 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
             >
               {navIcon(n.key)}
               {n.label}
+              {n.key === 'reviews' && reviewCount > 0 && (
+                <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center">{reviewCount}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -2834,6 +2967,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           {tab === 'users' && <UsersTab />}
           {tab === 'apps' && <AppsTab />}
           {tab === 'plans' && <PlansTab />}
+          {tab === 'reviews' && <CodeReviewsTab />}
           {tab === 'broadcast' && <BroadcastTab />}
           {tab === 'invites' && <InvitesTab />}
           {tab === 'webhooks' && <WebhooksTab />}

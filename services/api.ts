@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import type { Source, ChatSession, User } from '@/types';
 import { featureEnabledCached } from '@/lib/features';
+import type { WidgetConfig } from '@/lib/widgetTheme';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
 const TOKEN_KEY = 'close_ai_token';
@@ -901,6 +902,66 @@ export async function adminUpdatePlan(key: string, patch: AdminPlanPatch): Promi
 
 export async function adminDeletePlan(key: string): Promise<void> {
   await client.delete(`/admin/plans/${key}`);
+}
+
+// ── Widget appearance (embeddable chat customization) ──
+export type CssStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
+/** Owner-side config: render fields + custom-CSS review state. */
+export interface OwnerWidgetConfig extends Partial<WidgetConfig> {
+  customCssPending?: string;
+  cssStatus?: CssStatus;
+  cssNote?: string;
+  cssSubmittedAt?: string | null;
+}
+
+export async function getWidgetConfig(keyId: number): Promise<OwnerWidgetConfig> {
+  const res = await client.get<{ config: OwnerWidgetConfig }>(`/api-keys/${keyId}/widget`);
+  return res.data.config ?? {};
+}
+
+/** Save the instant appearance fields (title/theme/accent/logo/suggestions). CSS is NOT saved here. */
+export async function saveWidgetConfig(keyId: number, config: WidgetConfig): Promise<OwnerWidgetConfig> {
+  const res = await client.put<{ config: OwnerWidgetConfig }>(`/api-keys/${keyId}/widget`, { config });
+  return res.data.config ?? {};
+}
+
+/** Submit custom CSS for super-admin review (empty string clears it immediately). */
+export async function submitWidgetCss(keyId: number, css: string): Promise<OwnerWidgetConfig> {
+  const res = await client.post<{ config: OwnerWidgetConfig }>(`/api-keys/${keyId}/widget/css`, { css });
+  return res.data.config ?? {};
+}
+
+/** Public — read a widget's appearance by its public token (used by the embed page). */
+export async function getPublicWidgetConfig(token: string): Promise<Partial<WidgetConfig>> {
+  const res = await client.get<{ config: Partial<WidgetConfig> }>('/v1/rag/config', { params: { app: token } });
+  return res.data.config ?? {};
+}
+
+// ── Admin: custom-CSS review queue ──
+export interface AdminCssReview {
+  key_id: number;
+  app_name: string;
+  prefix: string;
+  owner_email: string | null;
+  owner_name: string | null;
+  pending_css: string;
+  current_css: string;
+  status: string;
+  submitted_at: string | null;
+}
+
+export async function adminListCssReviews(): Promise<{ reviews: AdminCssReview[]; pending: number }> {
+  const res = await client.get<{ reviews: AdminCssReview[]; pending: number }>('/admin/css-reviews');
+  return { reviews: res.data.reviews ?? [], pending: res.data.pending ?? 0 };
+}
+
+export async function adminApproveCss(keyId: number): Promise<void> {
+  await client.post(`/admin/css-reviews/${keyId}/approve`);
+}
+
+export async function adminRejectCss(keyId: number, note: string): Promise<void> {
+  await client.post(`/admin/css-reviews/${keyId}/reject`, { note });
 }
 
 // ── Feature flags ──

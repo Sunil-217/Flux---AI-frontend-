@@ -12,14 +12,23 @@ import {
   getPlans,
   uploadKbDocument,
   deleteKbDocument,
+  getWidgetConfig,
+  saveWidgetConfig,
+  submitWidgetCss,
   apiError,
   type ApiKeyInfo,
   type KbInfo,
   type KbDocument,
   type PlanTier,
 } from '@/services/api';
+import {
+  WIDGET_THEMES,
+  WIDGET_CSS_CLASSES,
+  mergeWidgetConfig,
+  type WidgetConfig,
+} from '@/lib/widgetTheme';
 
-type Sub = 'knowledge' | 'integration' | 'plans';
+type Sub = 'knowledge' | 'integration' | 'appearance' | 'plans';
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -609,6 +618,316 @@ function PlansTab({ kb, plans }: { kb: KbInfo; plans: PlanTier[] }) {
   );
 }
 
+// ── Appearance sub-tab (widget customization + live preview) ───────────────────
+function CssStatusBadge({ status, hasCss }: { status: string; hasCss: boolean }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    approved: { label: 'Live', cls: 'text-emerald-400 bg-emerald-400/10' },
+    pending: { label: 'Pending review', cls: 'text-amber-400 bg-amber-400/10' },
+    rejected: { label: 'Rejected', cls: 'text-red-400 bg-red-400/10' },
+  };
+  const s = map[status];
+  if (!s || (status === 'approved' && !hasCss)) return null;
+  return <span className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${s.cls}`}>{s.label}</span>;
+}
+
+function AppearanceTab({ kb }: { kb: KbInfo }) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const previewUrl = `${origin}/embed/chat?app=${kb.widget_token}&preview=1`;
+  const [draft, setDraft] = useState<WidgetConfig | null>(null);
+  const [saved, setSaved] = useState<WidgetConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Custom CSS is review-gated, tracked separately from the instant fields.
+  const [css, setCss] = useState('');
+  const [cssBaseline, setCssBaseline] = useState('');
+  const [cssStatus, setCssStatus] = useState('none');
+  const [cssNote, setCssNote] = useState('');
+  const [showClasses, setShowClasses] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const applyOwnerCfg = useCallback((c: Awaited<ReturnType<typeof getWidgetConfig>>) => {
+    const m = { ...mergeWidgetConfig(c), customCss: '' };
+    setDraft(m);
+    setSaved(m);
+    const editor = c.customCssPending || c.customCss || '';
+    setCss(editor);
+    setCssBaseline(editor);
+    setCssStatus(c.cssStatus || (c.customCss ? 'approved' : 'none'));
+    setCssNote(c.cssNote || '');
+  }, []);
+
+  useEffect(() => {
+    getWidgetConfig(kb.key_id).then(applyOwnerCfg).catch(() => applyOwnerCfg({}));
+  }, [kb.key_id, applyOwnerCfg]);
+
+  // Preview reflects the instant fields PLUS the CSS currently in the editor.
+  const postDraft = useCallback(() => {
+    if (!draft) return;
+    iframeRef.current?.contentWindow?.postMessage({ type: 'closeai:preview', config: { ...draft, customCss: css } }, origin || '*');
+  }, [draft, css, origin]);
+
+  useEffect(() => { postDraft(); }, [postDraft]);
+
+  useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (e.origin !== origin) return;
+      if (e.data?.type === 'closeai:preview-ready') postDraft();
+    }
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [origin, postDraft]);
+
+  if (!draft || !saved) return <p className="text-xs text-[var(--ink-4)]">Loading…</p>;
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const cssDirty = css !== cssBaseline;
+  const set = (patch: Partial<WidgetConfig>) => setDraft((d) => (d ? { ...d, ...patch } : d));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const res = await saveWidgetConfig(kb.key_id, draft);
+      const m = { ...mergeWidgetConfig(res), customCss: '' };
+      setSaved(m);
+      setDraft(m);
+      toast.success('Appearance saved — live on your widget.');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not save appearance.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitCss = async () => {
+    setBusy(true);
+    try {
+      const res = await submitWidgetCss(kb.key_id, css);
+      const editor = res.customCssPending || res.customCss || '';
+      setCss(editor);
+      setCssBaseline(editor);
+      setCssStatus(res.cssStatus || 'none');
+      setCssNote(res.cssNote || '');
+      toast.success(css.trim() ? 'Submitted to admin for review.' : 'Custom CSS removed.');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not submit custom CSS.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls =
+    'w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors';
+  const labelCls = 'text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)]';
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
+      {/* Editor */}
+      <div className="space-y-5 min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Title (app name)</label>
+            <input className={inputCls} value={draft.title} maxLength={60} onChange={(e) => set({ title: e.target.value })} />
+          </div>
+          <div>
+            <label className={labelCls}>Status text</label>
+            <input className={inputCls} value={draft.subtitle} maxLength={40} onChange={(e) => set({ subtitle: e.target.value })} />
+          </div>
+          <div>
+            <label className={labelCls}>Welcome heading</label>
+            <input className={inputCls} value={draft.greeting} maxLength={80} onChange={(e) => set({ greeting: e.target.value })} />
+          </div>
+          <div>
+            <label className={labelCls}>Welcome subtext</label>
+            <input className={inputCls} value={draft.tagline} maxLength={160} onChange={(e) => set({ tagline: e.target.value })} />
+          </div>
+        </div>
+
+        {/* Logo */}
+        <div>
+          <label className={labelCls}>Logo (image URL)</label>
+          <div className="flex items-center gap-2 mt-1.5">
+            <div className="w-9 h-9 rounded-lg border border-[var(--line)] bg-[var(--fill)] flex items-center justify-center overflow-hidden flex-shrink-0">
+              {draft.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={draft.logoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <svg className="w-4 h-4 text-[var(--ink-4)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" /></svg>
+              )}
+            </div>
+            <input
+              className={inputCls}
+              value={draft.logoUrl}
+              maxLength={600}
+              placeholder="https://yoursite.com/logo.png"
+              onChange={(e) => set({ logoUrl: e.target.value })}
+            />
+          </div>
+          <p className="text-[11px] text-[var(--ink-4)] mt-1">Shown in the widget header. Use an https image URL (square works best). Leave blank for the default icon.</p>
+        </div>
+
+        {/* Theme picker */}
+        <div>
+          <label className={labelCls}>Template / theme</label>
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {WIDGET_THEMES.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => set({ theme: t.key })}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
+                  draft.theme === t.key
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--ink)]'
+                    : 'border-[var(--line)] text-[var(--ink-3)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ background: t.swatch }} />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Accent */}
+        <div>
+          <label className={labelCls}>Accent color</label>
+          <div className="flex items-center gap-2 mt-1.5">
+            <input
+              type="color"
+              value={draft.accent}
+              onChange={(e) => set({ accent: e.target.value })}
+              className="w-9 h-9 rounded-lg bg-transparent border border-[var(--line)] cursor-pointer p-0.5"
+            />
+            <input className={`${inputCls} max-w-[130px] font-mono`} value={draft.accent} onChange={(e) => set({ accent: e.target.value })} />
+          </div>
+        </div>
+
+        {/* Suggestions */}
+        <div>
+          <label className={labelCls}>Suggested questions</label>
+          <div className="space-y-1.5 mt-1.5">
+            {draft.suggestions.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  className={inputCls}
+                  value={s}
+                  maxLength={80}
+                  onChange={(e) => set({ suggestions: draft.suggestions.map((x, j) => (j === i ? e.target.value : x)) })}
+                />
+                <button
+                  onClick={() => set({ suggestions: draft.suggestions.filter((_, j) => j !== i) })}
+                  className="text-[var(--ink-4)] hover:text-red-400 transition-colors flex-shrink-0"
+                  title="Remove"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+            {draft.suggestions.length < 6 && (
+              <button onClick={() => set({ suggestions: [...draft.suggestions, ''] })} className="text-xs font-medium text-[var(--accent-fg)] hover:underline">
+                + Add question
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            disabled={busy || !dirty}
+            onClick={save}
+            className="btn-shine px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {dirty ? 'Save changes' : 'Saved'}
+          </button>
+          {dirty && (
+            <button onClick={() => { setDraft(saved); }} className="text-xs text-[var(--ink-4)] hover:text-[var(--ink)] transition-colors">
+              Reset
+            </button>
+          )}
+          <span className="text-[11px] text-[var(--ink-4)]">Title, logo, theme, accent &amp; questions apply instantly.</span>
+        </div>
+
+        {/* ── Custom CSS (review-gated) ─────────────────────────────── */}
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--fill)] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold text-[var(--ink)]">Custom CSS</h4>
+              <CssStatusBadge status={cssStatus} hasCss={!!cssBaseline.trim()} />
+            </div>
+            <span className="text-[10px] text-[var(--ink-4)] tabular-nums">{css.length}/4000</span>
+          </div>
+          <p className="text-[11px] text-[var(--ink-3)] leading-relaxed">
+            Style the widget with your own code. For everyone&apos;s safety, custom CSS is
+            <strong className="text-[var(--ink-2)]"> reviewed by an admin</strong> before it goes live on your site.
+          </p>
+
+          {cssStatus === 'pending' && (
+            <div className="text-[11px] text-amber-300/90 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2">
+              Submitted for review — your live widget keeps its last approved styles until an admin approves this.
+            </div>
+          )}
+          {cssStatus === 'rejected' && (
+            <div className="text-[11px] text-red-300/90 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+              <strong>Rejected by admin.</strong> {cssNote ? `Reason: ${cssNote}` : 'Please revise and resubmit.'} Your live widget is unchanged.
+            </div>
+          )}
+
+          <button onClick={() => setShowClasses((v) => !v)} className="text-[11px] text-[var(--accent-fg)] hover:underline">
+            {showClasses ? 'Hide' : 'Show'} the {WIDGET_CSS_CLASSES.length} classes you can target
+          </button>
+          {showClasses && (
+            <div className="flex flex-wrap gap-1">
+              {WIDGET_CSS_CLASSES.map((c) => (
+                <code key={c.cls} title={c.desc} className="text-[10px] font-mono text-[var(--ink-3)] bg-[var(--fill-strong)] rounded px-1.5 py-0.5">{c.cls}</code>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            value={css}
+            maxLength={4000}
+            onChange={(e) => setCss(e.target.value)}
+            rows={9}
+            spellCheck={false}
+            placeholder={'.cai-title { letter-spacing: .02em; }\n.cai-send { border-radius: 8px; }\n.cai-msg-bot { font-size: 13px; }'}
+            className="w-full bg-[var(--base)] border border-[var(--line)] rounded-lg px-3 py-2.5 text-xs font-mono leading-relaxed text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] resize-y"
+          />
+
+          <div className="flex items-center gap-3">
+            <button
+              disabled={busy || !cssDirty}
+              onClick={submitCss}
+              className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {css.trim() ? 'Submit for review' : 'Remove custom CSS'}
+            </button>
+            {cssDirty && (
+              <button onClick={() => setCss(cssBaseline)} className="text-xs text-[var(--ink-4)] hover:text-[var(--ink)] transition-colors">
+                Revert
+              </button>
+            )}
+            <span className="text-[11px] text-[var(--ink-4)]">Preview below shows your draft — it goes live only after approval.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Live preview */}
+      <div className="lg:sticky lg:top-0">
+        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Live preview</p>
+        <div className="rounded-2xl border border-[var(--line-strong)] bg-[var(--base)] p-2 shadow-2xl shadow-black/40">
+          <iframe
+            ref={iframeRef}
+            key={kb.widget_token}
+            src={previewUrl}
+            title="Widget preview"
+            onLoad={postDraft}
+            className="w-full rounded-xl"
+            style={{ height: 460, border: 'none' }}
+          />
+        </div>
+        <p className="text-[11px] text-[var(--ink-4)] mt-2">Reflects your draft. Custom CSS applies to the real widget only after admin approval.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Console shell ───────────────────────────────────────────────────────────────
 export function DeveloperConsole({ onClose }: { onClose: () => void }) {
   const [apps, setApps] = useState<ApiKeyInfo[]>([]);
@@ -668,6 +987,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
   const subTabs: [Sub, string][] = [
     ['knowledge', 'Knowledge base'],
     ['integration', 'Integration'],
+    ['appearance', 'Appearance'],
     ['plans', 'Plans'],
   ];
 
@@ -809,6 +1129,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
               <div key={sub} className="animate-fade-in">
                 {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => loadKb(kb.key_id)} />}
                 {sub === 'integration' && <IntegrationTab kb={kb} />}
+                {sub === 'appearance' && <AppearanceTab kb={kb} />}
                 {sub === 'plans' && <PlansTab kb={kb} plans={plans} />}
               </div>
             </div>
