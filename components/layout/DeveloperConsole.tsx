@@ -646,6 +646,8 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
 
   const applyOwnerCfg = useCallback((c: Awaited<ReturnType<typeof getWidgetConfig>>) => {
     const m = { ...mergeWidgetConfig(c), customCss: '' };
+    // Default the header title to the app's own name (still fully editable).
+    if (!(c.title || '').trim()) m.title = kb.name;
     setDraft(m);
     setSaved(m);
     const editor = c.customCssPending || c.customCss || '';
@@ -653,7 +655,7 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
     setCssBaseline(editor);
     setCssStatus(c.cssStatus || (c.customCss ? 'approved' : 'none'));
     setCssNote(c.cssNote || '');
-  }, []);
+  }, [kb.name]);
 
   useEffect(() => {
     getWidgetConfig(kb.key_id).then(applyOwnerCfg).catch(() => applyOwnerCfg({}));
