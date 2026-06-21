@@ -13,6 +13,8 @@ export interface WidgetConfig {
   suggestions: string[]; // suggested questions
   logoUrl: string; // header logo (https URL or data: URI); empty = default glyph
   customCss: string; // APPROVED CSS targeting .cai-* classes (review-gated)
+  leadCapture: boolean; // show a "leave your email" form in the widget
+  leadPrompt: string; // headline for the lead form
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
@@ -25,6 +27,8 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   suggestions: ['What do you offer?', 'How can I contact you?', 'What are your hours?'],
   logoUrl: '',
   customCss: '',
+  leadCapture: false,
+  leadPrompt: 'Leave your email and we’ll get back to you.',
 };
 
 export interface WidgetTheme {

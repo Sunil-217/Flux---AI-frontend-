@@ -1215,12 +1215,96 @@ export async function deleteKbDocument(keyId: number, docId: number): Promise<vo
 export async function ragChat(
   widgetToken: string,
   question: string,
-  history: { role: string; content: string }[]
-): Promise<{ answer: string; sources: { content: string; filename: string }[] }> {
-  const res = await client.post<{ answer: string; sources: { content: string; filename: string }[] }>(
+  history: { role: string; content: string }[],
+  sessionId?: string
+): Promise<{ answer: string; message_id?: number | null; sources: { content: string; filename: string }[] }> {
+  const res = await client.post<{ answer: string; message_id?: number | null; sources: { content: string; filename: string }[] }>(
     '/v1/rag/chat',
-    { question, history },
+    { question, history, session_id: sessionId },
     { headers: { 'X-Widget-Token': widgetToken } }
   );
   return res.data;
+}
+
+// Public — capture a lead from the embedded widget.
+export async function submitWidgetLead(
+  widgetToken: string,
+  lead: { name?: string; email?: string; message?: string; session_id?: string }
+): Promise<void> {
+  await client.post('/v1/rag/lead', lead, { headers: { 'X-Widget-Token': widgetToken } });
+}
+
+// Public — 👍/👎 on a widget answer.
+export async function submitWidgetFeedback(widgetToken: string, messageId: number, value: number): Promise<void> {
+  await client.post('/v1/rag/feedback', { message_id: messageId, value }, { headers: { 'X-Widget-Token': widgetToken } });
+}
+
+// Owner — LLM-suggest starter questions from the app's documents.
+export async function suggestStarterQuestions(keyId: number): Promise<string[]> {
+  const res = await client.post<{ questions: string[] }>(`/api-keys/${keyId}/suggest-questions`, {});
+  return res.data.questions ?? [];
+}
+
+// ── Widget insights (owner): analytics, conversations, leads ──
+export interface AppAnalytics {
+  total_questions: number;
+  window_questions: number;
+  conversations: number;
+  leads: number;
+  days: number;
+  helpful: number;
+  unhelpful: number;
+  unanswered: number;
+  by_day: { date: string; count: number }[];
+  top_questions: { question: string; count: number }[];
+  content_gaps: { question: string; count: number }[];
+}
+
+export interface AppConversation {
+  session_id: string;
+  messages: number;
+  started_at: string | null;
+  last_at: string | null;
+  preview: string;
+}
+
+export interface AppTranscriptMessage {
+  role: string;
+  content: string;
+  at: string | null;
+}
+
+export interface AppLead {
+  id: number;
+  name: string | null;
+  email: string | null;
+  message: string | null;
+  at: string | null;
+}
+
+export async function getAppAnalytics(keyId: number, days = 30): Promise<AppAnalytics> {
+  const res = await client.get<AppAnalytics>(`/api-keys/${keyId}/analytics`, { params: { days } });
+  return res.data;
+}
+
+export async function getAppConversations(keyId: number): Promise<AppConversation[]> {
+  const res = await client.get<{ conversations: AppConversation[] }>(`/api-keys/${keyId}/conversations`);
+  return res.data.conversations ?? [];
+}
+
+export async function getAppTranscript(keyId: number, sessionId: string): Promise<AppTranscriptMessage[]> {
+  const res = await client.get<{ messages: AppTranscriptMessage[] }>(`/api-keys/${keyId}/conversations/${encodeURIComponent(sessionId)}`);
+  return res.data.messages ?? [];
+}
+
+export async function getAppLeads(keyId: number): Promise<AppLead[]> {
+  const res = await client.get<{ leads: AppLead[] }>(`/api-keys/${keyId}/leads`);
+  return res.data.leads ?? [];
+}
+
+export async function uploadWidgetLogo(keyId: number, file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await client.post<{ logoUrl: string }>(`/api-keys/${keyId}/widget/logo`, fd);
+  return res.data.logoUrl;
 }

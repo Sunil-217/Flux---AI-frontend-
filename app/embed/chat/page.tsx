@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ragChat, apiError, getPublicWidgetConfig } from '@/services/api';
+import { ragChat, apiError, getPublicWidgetConfig, submitWidgetLead, submitWidgetFeedback } from '@/services/api';
 import {
   DEFAULT_WIDGET_CONFIG,
   mergeWidgetConfig,
@@ -15,6 +15,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   sources?: { filename: string; content: string }[];
+  message_id?: number | null;
+  feedback?: number;
 }
 
 // Static styling hooks that are awkward to set inline (placeholder, focus, hover,
@@ -43,8 +45,32 @@ function EmbedChatInner() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sessionId] = useState(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2)
+  );
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadSent, setLeadSent] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const rateMessage = useCallback((index: number, mid: number | null | undefined, value: number) => {
+    if (!mid || !widgetToken) return;
+    setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, feedback: value } : m)));
+    submitWidgetFeedback(widgetToken, mid, value).catch(() => {});
+  }, [widgetToken]);
+
+  const sendLead = useCallback(async () => {
+    const email = leadEmail.trim();
+    if (!email || !widgetToken) return;
+    try {
+      await submitWidgetLead(widgetToken, { email, session_id: sessionId });
+      setLeadSent(true);
+    } catch {
+      /* swallow — lead capture is best-effort */
+    }
+  }, [leadEmail, widgetToken, sessionId]);
 
   // Load the saved appearance for this app.
   useEffect(() => {
@@ -88,15 +114,15 @@ function EmbedChatInner() {
 
       const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
       try {
-        const res = await ragChat(widgetToken, q, history);
-        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, sources: res.sources }]);
+        const res = await ragChat(widgetToken, q, history, sessionId);
+        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, sources: res.sources, message_id: res.message_id }]);
       } catch (e: unknown) {
         setError(apiError(e, 'Failed to get a response.'));
         setMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
       }
       setLoading(false);
     },
-    [loading, widgetToken, messages]
+    [loading, widgetToken, messages, sessionId]
   );
 
   function autoGrow(el: HTMLTextAreaElement) {
@@ -187,6 +213,37 @@ function EmbedChatInner() {
                 </button>
               ))}
             </div>
+
+            {cfg.leadCapture && (
+              <div className="cai-lead w-full max-w-[240px] mt-1 pt-3" style={{ borderTop: '1px solid var(--w-border)' }}>
+                {leadSent ? (
+                  <p className="text-xs" style={{ color: 'var(--w-text-muted)' }}>Thanks! We&apos;ll be in touch. ✅</p>
+                ) : (
+                  <>
+                    <p className="text-[11px] mb-1.5" style={{ color: 'var(--w-text-muted)' }}>{cfg.leadPrompt}</p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="email"
+                        value={leadEmail}
+                        onChange={(e) => setLeadEmail(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') sendLead(); }}
+                        placeholder="you@email.com"
+                        className="cai-lead-input flex-1 min-w-0 text-xs rounded-lg px-2.5 py-2 outline-none"
+                        style={{ color: 'var(--w-text)', background: 'var(--w-input-bg)', border: '1px solid var(--w-border)' }}
+                      />
+                      <button
+                        onClick={sendLead}
+                        disabled={!leadEmail.trim()}
+                        className="cai-lead-btn text-xs font-medium rounded-lg px-3 py-2 disabled:opacity-40"
+                        style={{ background: 'var(--w-accent)', color: '#fff' }}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -215,6 +272,19 @@ function EmbedChatInner() {
                       {fname}
                     </span>
                   ))}
+                </div>
+              )}
+              {msg.role === 'assistant' && msg.message_id != null && (
+                <div className="cai-feedback flex items-center gap-2 mt-2 pt-2" style={{ borderTop: '1px solid var(--w-border)' }}>
+                  <span className="text-[10px]" style={{ color: 'var(--w-text-muted)' }}>Was this helpful?</span>
+                  <button onClick={() => rateMessage(i, msg.message_id, msg.feedback === 1 ? 0 : 1)} aria-label="Helpful"
+                    style={{ color: msg.feedback === 1 ? 'var(--w-accent)' : 'var(--w-text-muted)', opacity: msg.feedback === 1 ? 1 : 0.6 }}>
+                    <svg className="w-3.5 h-3.5" fill={msg.feedback === 1 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3" /></svg>
+                  </button>
+                  <button onClick={() => rateMessage(i, msg.message_id, msg.feedback === -1 ? 0 : -1)} aria-label="Not helpful"
+                    style={{ color: msg.feedback === -1 ? '#ef4444' : 'var(--w-text-muted)', opacity: msg.feedback === -1 ? 1 : 0.6 }}>
+                    <svg className="w-3.5 h-3.5" fill={msg.feedback === -1 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zm7-13h2.67A2.31 2.31 0 0122 4v7a2.31 2.31 0 01-2.33 2H17" /></svg>
+                  </button>
                 </div>
               )}
             </div>

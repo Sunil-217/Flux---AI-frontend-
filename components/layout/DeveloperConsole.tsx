@@ -15,6 +15,16 @@ import {
   getWidgetConfig,
   saveWidgetConfig,
   submitWidgetCss,
+  uploadWidgetLogo,
+  suggestStarterQuestions,
+  getAppAnalytics,
+  getAppConversations,
+  getAppTranscript,
+  getAppLeads,
+  type AppAnalytics,
+  type AppConversation,
+  type AppTranscriptMessage,
+  type AppLead,
   apiError,
   type ApiKeyInfo,
   type KbInfo,
@@ -28,7 +38,7 @@ import {
   type WidgetConfig,
 } from '@/lib/widgetTheme';
 
-type Sub = 'knowledge' | 'integration' | 'appearance' | 'plans';
+type Sub = 'knowledge' | 'integration' | 'appearance' | 'insights' | 'plans';
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -642,6 +652,8 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
   const [cssStatus, setCssStatus] = useState('none');
   const [cssNote, setCssNote] = useState('');
   const [showClasses, setShowClasses] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [suggestBusy, setSuggestBusy] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const applyOwnerCfg = useCallback((c: Awaited<ReturnType<typeof getWidgetConfig>>) => {
@@ -719,6 +731,38 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
     }
   };
 
+  const doSuggest = async () => {
+    setSuggestBusy(true);
+    try {
+      const qs = await suggestStarterQuestions(kb.key_id);
+      if (qs.length) {
+        setDraft((d) => (d ? { ...d, suggestions: qs } : d));
+        toast.success('Suggested questions from your docs');
+      } else {
+        toast.error('Upload a document first so I can suggest questions.');
+      }
+    } catch (e) {
+      toast.error(apiError(e, 'Could not suggest questions.'));
+    } finally {
+      setSuggestBusy(false);
+    }
+  };
+
+  const onLogoFile = async (file: File) => {
+    setLogoBusy(true);
+    try {
+      const url = await uploadWidgetLogo(kb.key_id, file);
+      // Already persisted server-side — reflect in both draft + baseline.
+      setDraft((d) => (d ? { ...d, logoUrl: url } : d));
+      setSaved((s) => (s ? { ...s, logoUrl: url } : s));
+      toast.success('Logo uploaded');
+    } catch (e) {
+      toast.error(apiError(e, 'Could not upload logo.'));
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
   const inputCls =
     'w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors';
   const labelCls = 'text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)]';
@@ -748,7 +792,7 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
 
         {/* Logo */}
         <div>
-          <label className={labelCls}>Logo (image URL)</label>
+          <label className={labelCls}>Logo</label>
           <div className="flex items-center gap-2 mt-1.5">
             <div className="w-9 h-9 rounded-lg border border-[var(--line)] bg-[var(--fill)] flex items-center justify-center overflow-hidden flex-shrink-0">
               {draft.logoUrl ? (
@@ -758,15 +802,31 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
                 <svg className="w-4 h-4 text-[var(--ink-4)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" /></svg>
               )}
             </div>
-            <input
-              className={inputCls}
-              value={draft.logoUrl}
-              maxLength={600}
-              placeholder="https://yoursite.com/logo.png"
-              onChange={(e) => set({ logoUrl: e.target.value })}
-            />
+            {draft.logoUrl.startsWith('data:') ? (
+              <div className="flex-1 flex items-center gap-2 text-xs text-[var(--ink-3)]">
+                Uploaded image
+                <button onClick={() => set({ logoUrl: '' })} className="text-[var(--ink-4)] hover:text-red-400 transition-colors">Remove</button>
+              </div>
+            ) : (
+              <input
+                className={inputCls}
+                value={draft.logoUrl}
+                maxLength={600}
+                placeholder="https://yoursite.com/logo.png"
+                onChange={(e) => set({ logoUrl: e.target.value })}
+              />
+            )}
+            <label className="text-xs font-medium px-2.5 py-2 rounded-lg border border-[var(--line)] text-[var(--ink-2)] hover:bg-[var(--fill)] cursor-pointer flex-shrink-0 transition-colors">
+              {logoBusy ? 'Uploading…' : 'Upload'}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogoFile(f); e.currentTarget.value = ''; }}
+              />
+            </label>
           </div>
-          <p className="text-[11px] text-[var(--ink-4)] mt-1">Shown in the widget header. Use an https image URL (square works best). Leave blank for the default icon.</p>
+          <p className="text-[11px] text-[var(--ink-4)] mt-1">Shown in the widget header. Upload an image (≤150 KB) or paste an https URL. Leave blank for the default icon.</p>
         </div>
 
         {/* Theme picker */}
@@ -806,7 +866,17 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
 
         {/* Suggestions */}
         <div>
-          <label className={labelCls}>Suggested questions</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className={labelCls}>Suggested questions</label>
+            <button
+              onClick={doSuggest}
+              disabled={suggestBusy}
+              className="flex items-center gap-1 text-[11px] font-medium text-[var(--accent-fg)] hover:underline disabled:opacity-50"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3z" /></svg>
+              {suggestBusy ? 'Suggesting…' : 'Suggest from docs'}
+            </button>
+          </div>
           <div className="space-y-1.5 mt-1.5">
             {draft.suggestions.map((s, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -831,6 +901,24 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Lead capture */}
+        <div>
+          <label className="flex items-center gap-2 text-sm text-[var(--ink-2)] cursor-pointer select-none">
+            <input type="checkbox" checked={draft.leadCapture} onChange={(e) => set({ leadCapture: e.target.checked })} className="accent-[var(--accent)]" />
+            Capture leads — show an email form in the widget
+          </label>
+          {draft.leadCapture && (
+            <input
+              className={`${inputCls} mt-2`}
+              value={draft.leadPrompt}
+              maxLength={160}
+              placeholder="Leave your email and we’ll get back to you."
+              onChange={(e) => set({ leadPrompt: e.target.value })}
+            />
+          )}
+          <p className="text-[11px] text-[var(--ink-4)] mt-1">Captured emails appear in the <strong>Insights</strong> tab.</p>
         </div>
 
         <div className="flex items-center gap-3 pt-1">
@@ -940,6 +1028,199 @@ function AppearanceTab({ kb }: { kb: KbInfo }) {
   );
 }
 
+// ── Insights sub-tab (developer analytics + conversations + leads) ─────────────
+function fmtWhen(iso: string | null): string {
+  if (!iso) return '';
+  const d = parseUTC(iso);
+  return d ? d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+}
+
+function InsightsTab({ kb }: { kb: KbInfo }) {
+  const [view, setView] = useState<'overview' | 'conversations' | 'leads'>('overview');
+  const [analytics, setAnalytics] = useState<AppAnalytics | null>(null);
+  const [convos, setConvos] = useState<AppConversation[] | null>(null);
+  const [leads, setLeads] = useState<AppLead[] | null>(null);
+  const [openSid, setOpenSid] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<AppTranscriptMessage[] | null>(null);
+
+  useEffect(() => {
+    getAppAnalytics(kb.key_id).then(setAnalytics).catch((e) => toast.error(apiError(e, 'Could not load analytics.')));
+  }, [kb.key_id]);
+
+  useEffect(() => {
+    if (view === 'conversations' && convos === null) getAppConversations(kb.key_id).then(setConvos).catch(() => setConvos([]));
+    if (view === 'leads' && leads === null) getAppLeads(kb.key_id).then(setLeads).catch(() => setLeads([]));
+  }, [view, kb.key_id, convos, leads]);
+
+  const openTranscript = (sid: string) => {
+    if (openSid === sid) { setOpenSid(null); return; }
+    setOpenSid(sid);
+    setTranscript(null);
+    getAppTranscript(kb.key_id, sid).then(setTranscript).catch(() => setTranscript([]));
+  };
+
+  const maxDay = analytics ? Math.max(1, ...analytics.by_day.map((d) => d.count)) : 1;
+  const subBtn = (v: typeof view, label: string) =>
+    `px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+      view === v ? 'bg-[var(--elevated)] text-[var(--ink)] shadow-sm' : 'text-[var(--ink-3)] hover:text-[var(--ink-2)]'
+    }`;
+
+  return (
+    <div>
+      <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-xl bg-[var(--fill)] border border-[var(--line)]">
+        <button onClick={() => setView('overview')} className={subBtn('overview', '')}>Overview</button>
+        <button onClick={() => setView('conversations')} className={subBtn('conversations', '')}>Conversations</button>
+        <button onClick={() => setView('leads')} className={subBtn('leads', '')}>Leads</button>
+      </div>
+
+      {/* Overview */}
+      {view === 'overview' && (
+        !analytics ? (
+          <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+        ) : (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: 'Questions', value: analytics.total_questions },
+                { label: 'Conversations', value: analytics.conversations },
+                { label: 'Leads', value: analytics.leads },
+                { label: `Last ${analytics.days}d`, value: analytics.window_questions },
+              ].map((k) => (
+                <div key={k.label} className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+                  <p className="text-[28px] leading-none font-semibold text-[var(--ink)] tabular-nums">{k.value}</p>
+                  <p className="text-xs text-[var(--ink-3)] mt-2">{k.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+              <p className="text-sm font-medium text-[var(--ink)] mb-3">Questions · last {analytics.days} days</p>
+              {analytics.by_day.length === 0 ? (
+                <p className="text-xs text-[var(--ink-4)]">No questions yet. Once visitors use your widget, activity shows here.</p>
+              ) : (
+                <div className="flex items-end gap-1 h-28">
+                  {analytics.by_day.map((d) => (
+                    <div key={d.date} className="flex-1 flex flex-col items-center justify-end gap-1 group" title={`${d.date}: ${d.count}`}>
+                      <div className="w-full rounded-t bg-[var(--accent)]/70 group-hover:bg-[var(--accent)] transition-colors" style={{ height: `${Math.max(4, (d.count / maxDay) * 100)}%` }} />
+                      <span className="text-[8px] text-[var(--ink-4)]">{d.date.slice(5)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+              <p className="text-sm font-medium text-[var(--ink)] mb-3">Top questions</p>
+              {analytics.top_questions.length === 0 ? (
+                <p className="text-xs text-[var(--ink-4)]">No data yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {analytics.top_questions.map((q, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-[var(--ink-2)] truncate">{q.question}</span>
+                      <span className="text-[var(--ink-4)] tabular-nums flex-shrink-0">{q.count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Helpfulness + content gaps */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+                <p className="text-sm font-medium text-[var(--ink)] mb-3">Answer quality</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-emerald-400">👍 {analytics.helpful} helpful</span>
+                  <span className="text-red-400">👎 {analytics.unhelpful} not</span>
+                </div>
+                <p className="text-xs text-[var(--ink-4)] mt-2">{analytics.unanswered} answer{analytics.unanswered === 1 ? '' : 's'} had no matching content.</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4">
+                <p className="text-sm font-medium text-[var(--ink)] mb-1">Content gaps</p>
+                <p className="text-[11px] text-[var(--ink-4)] mb-2">Questions your docs couldn&apos;t answer — add these topics.</p>
+                {analytics.content_gaps.length === 0 ? (
+                  <p className="text-xs text-[var(--ink-4)]">None — your docs are covering questions. 🎉</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {analytics.content_gaps.map((q, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-[var(--ink-2)] truncate">{q.question}</span>
+                        <span className="text-amber-400 tabular-nums flex-shrink-0">{q.count}×</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Conversations */}
+      {view === 'conversations' && (
+        convos === null ? (
+          <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+        ) : convos.length === 0 ? (
+          <p className="text-sm text-[var(--ink-4)] py-8 text-center">No conversations yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {convos.map((c) => (
+              <div key={c.session_id} className="rounded-xl border border-[var(--line)] bg-[var(--fill)] overflow-hidden">
+                <button onClick={() => openTranscript(c.session_id)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[var(--fill-strong)] transition-colors">
+                  <svg className={`w-4 h-4 flex-shrink-0 text-[var(--ink-4)] transition-transform ${openSid === c.session_id ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--ink)] truncate">{c.preview || '(no question)'}</p>
+                    <p className="text-[11px] text-[var(--ink-4)]">{c.messages} messages · {fmtWhen(c.last_at)}</p>
+                  </div>
+                </button>
+                {openSid === c.session_id && (
+                  <div className="border-t border-[var(--line)] bg-[var(--base)]/40 px-3.5 py-3 space-y-2">
+                    {transcript === null ? (
+                      <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+                    ) : (
+                      transcript.map((m, i) => (
+                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${m.role === 'user' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--fill-strong)] text-[var(--ink-2)]'}`}>
+                            {m.content}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Leads */}
+      {view === 'leads' && (
+        leads === null ? (
+          <p className="text-xs text-[var(--ink-4)]">Loading…</p>
+        ) : leads.length === 0 ? (
+          <p className="text-sm text-[var(--ink-4)] py-8 text-center">No leads captured yet. Enable lead capture in the Appearance tab.</p>
+        ) : (
+          <div className="space-y-2">
+            {leads.map((l) => (
+              <div key={l.id} className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--fill)] px-3.5 py-3">
+                <div className="w-9 h-9 rounded-full bg-[var(--accent)]/15 text-[var(--accent-fg)] flex items-center justify-center flex-shrink-0 text-sm font-semibold">
+                  {(l.email || l.name || '?')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--ink)] truncate">{l.email || l.name || 'Unknown'}</p>
+                  {l.message && <p className="text-[11px] text-[var(--ink-4)] truncate">{l.message}</p>}
+                </div>
+                <span className="text-[11px] text-[var(--ink-4)] flex-shrink-0">{fmtWhen(l.at)}</span>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ── Console shell ───────────────────────────────────────────────────────────────
 export function DeveloperConsole({ onClose }: { onClose: () => void }) {
   const [apps, setApps] = useState<ApiKeyInfo[]>([]);
@@ -1000,6 +1281,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
     ['knowledge', 'Knowledge base'],
     ['integration', 'Integration'],
     ['appearance', 'Appearance'],
+    ['insights', 'Insights'],
     ['plans', 'Plans'],
   ];
 
@@ -1142,6 +1424,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
                 {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => loadKb(kb.key_id)} />}
                 {sub === 'integration' && <IntegrationTab kb={kb} />}
                 {sub === 'appearance' && <AppearanceTab kb={kb} />}
+                {sub === 'insights' && <InsightsTab kb={kb} />}
                 {sub === 'plans' && <PlansTab kb={kb} plans={plans} />}
               </div>
             </div>
