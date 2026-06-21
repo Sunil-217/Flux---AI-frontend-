@@ -286,17 +286,46 @@ input:focus-visible {
 }
 .animate-fade-in { animation: fade-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* ── Buttery interactivity ──────────────────────────────────────────────────
+   A gentle default transition on interactive elements so every hover/press
+   feels smooth across the whole app. Tailwind's own `transition-*` utilities
+   (which set transition-property) override this on elements that opt in, so
+   nothing existing changes — this only lifts controls that had no transition. */
+button, a, summary, [role="button"], label[role], .cai-interactive {
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+    box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+}
+
+/* Reusable content-reveal (home, panels) + a staggered variant. */
+.animate-rise-in { animation: rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.home-stagger > * { opacity: 0; animation: rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.home-stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.home-stagger > *:nth-child(2) { animation-delay: 0.11s; }
+.home-stagger > *:nth-child(3) { animation-delay: 0.18s; }
+.home-stagger > *:nth-child(4) { animation-delay: 0.25s; }
+.home-stagger > *:nth-child(5) { animation-delay: 0.32s; }
+.home-stagger > *:nth-child(6) { animation-delay: 0.39s; }
+
+/* Subtle elevation for cards / chips on hover. */
+.hover-lift { transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, border-color 0.18s ease, background-color 0.18s ease; }
+.hover-lift:hover { transform: translateY(-2px); }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-msg-in,
   .animate-glow-pulse,
   .animate-shimmer,
   .animate-card-in,
+  .animate-rise-in,
   .auth-stagger > *,
+  .home-stagger > *,
   .animate-modal-in {
     animation: none;
   }
-  .auth-stagger > * { opacity: 1; }
+  .auth-stagger > *,
+  .home-stagger > * { opacity: 1; }
+  button, a, summary, [role="button"], .hover-lift { transition: none; }
+  .hover-lift:hover { transform: none; }
 }
 
 /* Export → PDF: window.print() yields a clean, ink-friendly transcript. */

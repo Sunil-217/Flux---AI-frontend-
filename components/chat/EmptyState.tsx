@@ -179,7 +179,7 @@ export function EmptyState({
   // ── New user (or no history): simple welcome ──
   if (!isReturning) {
     return (
-      <div className="relative flex flex-col items-center justify-center h-full px-6 text-center select-none overflow-hidden">
+      <div className="relative home-stagger flex flex-col items-center justify-center h-full px-6 text-center select-none overflow-hidden">
         <div className="brand-glyph" aria-hidden />
         <div className="relative mb-7">
           <Logo size={68} />
@@ -217,10 +217,10 @@ export function EmptyState({
               <button
                 key={s.label}
                 onClick={() => onPickPrompt(s.text)}
-                className="group inline-flex items-center gap-2 text-[13px] text-[var(--ink-2)] border border-[var(--line)] hover:border-[var(--line-strong)] hover:bg-[var(--fill)] rounded-full px-3.5 py-2 transition-colors"
+                className="group inline-flex items-center gap-2 text-[13px] text-[var(--ink-2)] hover:text-[var(--ink)] border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--fill)]/50 hover:bg-[var(--fill)] rounded-full px-4 py-2.5 hover-lift hover:shadow-[0_12px_30px_-14px_rgba(0,0,0,0.7)] active:translate-y-0"
               >
                 <svg
-                  className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-fg)]"
+                  className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-fg)] transition-transform duration-200 group-hover:scale-110"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
