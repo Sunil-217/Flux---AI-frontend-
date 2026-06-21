@@ -30,6 +30,8 @@ import {
   adminListCssReviews,
   adminApproveCss,
   adminRejectCss,
+  adminWidgetAnalytics,
+  type AdminWidgetAnalytics,
   adminListBroadcasts,
   adminCreateBroadcast,
   adminSetBroadcastActive,
@@ -297,12 +299,14 @@ function TopUsers({ users }: { users: AdminStats['top_users'] }) {
 function DashboardTab() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [wa, setWa] = useState<AdminWidgetAnalytics | null>(null);
 
   useEffect(() => {
     adminStats()
       .then(setStats)
       .catch((e) => toast.error(apiError(e, 'Could not load stats.')))
       .finally(() => setLoading(false));
+    adminWidgetAnalytics().then(setWa).catch(() => {});
   }, []);
 
   if (loading) return <p className="text-xs text-[var(--ink-4)]">Loading dashboard…</p>;
@@ -335,6 +339,32 @@ function DashboardTab() {
         <MiniStat label="New · 30d" value={u.new_30d} />
         <MiniStat label="w/ memory" value={c.memory_users} />
       </div>
+
+      {/* Widget activity across all apps */}
+      {wa && (
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--fill)] p-4 mb-5">
+          <p className="text-sm font-medium text-[var(--ink)] mb-3">Widget activity · all apps</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <MiniStat label="Questions" value={wa.total_questions} />
+            <MiniStat label="Conversations" value={wa.conversations} />
+            <MiniStat label="Leads" value={wa.leads} />
+            <MiniStat label="Unanswered" value={wa.unanswered} tone={wa.unanswered > 0 ? 'amber' : undefined} />
+          </div>
+          {wa.top_apps.length > 0 && (
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)] mb-2">Busiest apps</p>
+              <div className="space-y-1.5">
+                {wa.top_apps.map((a) => (
+                  <div key={a.key_id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-[var(--ink-2)] truncate">{a.name}</span>
+                    <span className="text-[var(--ink-4)] tabular-nums flex-shrink-0">{fmt(a.questions)} questions</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Chart */}
       <div className="mb-5">

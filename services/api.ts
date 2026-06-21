@@ -964,6 +964,22 @@ export async function adminRejectCss(keyId: number, note: string): Promise<void>
   await client.post(`/admin/css-reviews/${keyId}/reject`, { note });
 }
 
+// ── Admin: platform-wide widget analytics ──
+export interface AdminWidgetAnalytics {
+  days: number;
+  total_questions: number;
+  conversations: number;
+  leads: number;
+  unanswered: number;
+  by_day: { date: string; count: number }[];
+  top_apps: { key_id: number; name: string; questions: number }[];
+}
+
+export async function adminWidgetAnalytics(days = 30): Promise<AdminWidgetAnalytics> {
+  const res = await client.get<AdminWidgetAnalytics>('/admin/widget-analytics', { params: { days } });
+  return res.data;
+}
+
 // ── Feature flags ──
 export type FeatureMap = Record<string, boolean>;
 

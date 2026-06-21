@@ -17,6 +17,7 @@ interface Message {
   sources?: { filename: string; content: string }[];
   message_id?: number | null;
   feedback?: number;
+  unanswered?: boolean;
 }
 
 // Static styling hooks that are awkward to set inline (placeholder, focus, hover,
@@ -52,6 +53,8 @@ function EmbedChatInner() {
   );
   const [leadEmail, setLeadEmail] = useState('');
   const [leadSent, setLeadSent] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadMessage, setLeadMessage] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,12 +68,19 @@ function EmbedChatInner() {
     const email = leadEmail.trim();
     if (!email || !widgetToken) return;
     try {
-      await submitWidgetLead(widgetToken, { email, session_id: sessionId });
+      await submitWidgetLead(widgetToken, { email, message: leadMessage || undefined, session_id: sessionId });
       setLeadSent(true);
+      setLeadOpen(false);
     } catch {
       /* swallow — lead capture is best-effort */
     }
-  }, [leadEmail, widgetToken, sessionId]);
+  }, [leadEmail, leadMessage, widgetToken, sessionId]);
+
+  const askHuman = useCallback((question: string) => {
+    setLeadMessage(question);
+    setLeadOpen(true);
+    setLeadSent(false);
+  }, []);
 
   // Load the saved appearance for this app.
   useEffect(() => {
@@ -115,7 +125,7 @@ function EmbedChatInner() {
       const history = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
       try {
         const res = await ragChat(widgetToken, q, history, sessionId);
-        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, sources: res.sources, message_id: res.message_id }]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, sources: res.sources, message_id: res.message_id, unanswered: !res.sources || res.sources.length === 0 }]);
       } catch (e: unknown) {
         setError(apiError(e, 'Failed to get a response.'));
         setMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
@@ -287,6 +297,15 @@ function EmbedChatInner() {
                   </button>
                 </div>
               )}
+              {msg.role === 'assistant' && msg.unanswered && cfg.leadCapture && (
+                <button
+                  onClick={() => askHuman(messages[i - 1]?.content || msg.content)}
+                  className="cai-handoff mt-2 text-xs font-medium rounded-lg px-2.5 py-1.5"
+                  style={{ background: 'var(--w-surface)', color: 'var(--w-accent)', border: '1px solid var(--w-border)' }}
+                >
+                  📩 Ask a human instead
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -305,6 +324,34 @@ function EmbedChatInner() {
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Human-handoff lead card */}
+      {leadOpen && !leadSent && (
+        <div className="flex-shrink-0 px-4 pb-1">
+          <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--w-surface)', border: '1px solid var(--w-border)' }}>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <p className="text-xs font-medium" style={{ color: 'var(--w-text)' }}>Leave your email — we&apos;ll reply</p>
+              <button onClick={() => setLeadOpen(false)} aria-label="Close" style={{ color: 'var(--w-text-muted)' }}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="email"
+                value={leadEmail}
+                onChange={(e) => setLeadEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') sendLead(); }}
+                placeholder="you@email.com"
+                className="flex-1 min-w-0 text-xs rounded-lg px-2.5 py-2 outline-none"
+                style={{ color: 'var(--w-text)', background: 'var(--w-input-bg)', border: '1px solid var(--w-border)' }}
+              />
+              <button onClick={sendLead} disabled={!leadEmail.trim()} className="text-xs font-medium rounded-lg px-3 py-2 disabled:opacity-40" style={{ background: 'var(--w-accent)', color: '#fff' }}>
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="flex-shrink-0 px-4 pb-4 pt-2">
