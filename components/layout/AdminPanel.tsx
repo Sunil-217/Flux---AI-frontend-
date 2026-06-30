@@ -47,6 +47,16 @@ import {
   adminUpdateWebhook,
   adminDeleteWebhook,
   adminTestWebhook,
+  adminListGateways,
+  adminCreateGateway,
+  adminUpdateGateway,
+  adminDeleteGateway,
+  adminGatewayCatalog,
+  adminOnboardGateway,
+  type PaymentGateway,
+  type PaymentGatewayInput,
+  type GatewayCatalog,
+  type GatewayTarget,
   apiError,
   type AdminStats,
   type AdminUser,
@@ -70,7 +80,7 @@ import {
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import { FEATURE_GROUPS } from '@/lib/features';
 
-type Tab = 'dashboard' | 'users' | 'apps' | 'plans' | 'reviews' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
+type Tab = 'dashboard' | 'users' | 'apps' | 'plans' | 'payments' | 'reviews' | 'broadcast' | 'invites' | 'webhooks' | 'features' | 'audit';
 
 const headingCls = 'text-base font-semibold text-[var(--ink)]';
 const subCls = 'text-xs text-[var(--ink-3)] mt-0.5';
@@ -2867,6 +2877,561 @@ function WebhooksTab() {
   );
 }
 
+// ── Payment Gateways ────────────────────────────────────────────────────────
+// Persisted via /admin/payment-gateways (services/api). `PaymentGateway` /
+// `PaymentGatewayInput` are imported from there. Phase 2 binds each gateway to a
+// remote orchestrated PSP on the Fluxway backend.
+
+function EnabledCell({ on }: { on: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${on ? 'text-emerald-500' : 'text-red-500'}`}>
+      {on ? (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.5 12.5l2.5 2.5 4.5-5" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l6 6m0-6l-6 6" />
+        </svg>
+      )}
+      {on ? 'Enabled' : 'Disabled'}
+    </span>
+  );
+}
+
+function GatewayFormModal({
+  initial,
+  onSave,
+  onClose,
+}: {
+  initial: PaymentGateway | null;
+  onSave: (g: PaymentGatewayInput) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [logo, setLogo] = useState(initial?.logo ?? '');
+  const [deposit, setDeposit] = useState(initial?.deposit ?? true);
+  const [withdrawal, setWithdrawal] = useState(initial?.withdrawal ?? true);
+  const [active, setActive] = useState(initial?.active ?? true);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const submit = () => {
+    const n = name.trim();
+    if (!n) return;
+    onSave({ name: n, logo: logo.trim() || undefined, deposit, withdrawal, active });
+    onClose();
+  };
+
+  const row = (label: string, hint: string, value: boolean, set: (v: boolean) => void) => (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm text-[var(--ink)]">{label}</p>
+        <p className="text-[11px] text-[var(--ink-4)]">{hint}</p>
+      </div>
+      <Toggle on={value} busy={false} onClick={() => set(!value)} />
+    </div>
+  );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={initial ? 'Edit payment gateway' : 'Add payment gateway'}
+        className="animate-modal-in relative w-full max-w-md rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl p-5"
+      >
+        <h2 className="text-base font-semibold text-[var(--ink)]">
+          {initial ? 'Edit payment gateway' : 'Add payment gateway'}
+        </h2>
+        <p className="text-xs text-[var(--ink-3)] mt-1">Configure how this method handles deposits and withdrawals.</p>
+
+        <label className="block text-xs text-[var(--ink-3)] mt-4 mb-1.5">Payment method</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="e.g. Wire Transfer"
+          className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+        />
+
+        <label className="block text-xs text-[var(--ink-3)] mt-3 mb-1.5">Logo URL <span className="text-[var(--ink-4)]">(optional)</span></label>
+        <input
+          value={logo}
+          onChange={(e) => setLogo(e.target.value)}
+          placeholder="https://…/logo.png"
+          className="w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors"
+        />
+
+        <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--fill)] px-3.5 divide-y divide-[var(--line)]">
+          {row('Deposit', 'Allow funding through this method', deposit, setDeposit)}
+          {row('Withdrawal', 'Allow payouts through this method', withdrawal, setWithdrawal)}
+          {row('Active', 'Visible and usable across the platform', active, setActive)}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-5">
+          <button
+            onClick={onClose}
+            className="text-sm font-medium text-[var(--ink-3)] hover:text-[var(--ink)] px-4 py-2 rounded-lg hover:bg-[var(--fill)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            className="text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2 hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {initial ? 'Save changes' : 'Add gateway'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Onboard a PSP from the live Fluxway catalog: pick a target, fill the
+// schema-driven credential fields, submit → enabled at brand level both sides.
+function GatewayOnboardModal({
+  targets,
+  onSaved,
+  onClose,
+  onManual,
+}: {
+  targets: GatewayTarget[];
+  onSaved: (g: PaymentGateway) => void;
+  onClose: () => void;
+  onManual: () => void;
+}) {
+  const [targetId, setTargetId] = useState('');
+  const [name, setName] = useState('');
+  const [cred, setCred] = useState<Record<string, unknown>>({});
+  const [busy, setBusy] = useState(false);
+
+  const target = useMemo(() => targets.find((t) => t.id === targetId) ?? null, [targets, targetId]);
+  const props = target?.credential_schema?.properties ?? {};
+  const required = target?.credential_schema?.required ?? [];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const pick = (t: GatewayTarget | null) => {
+    setTargetId(t?.id ?? '');
+    setName(t?.name ?? '');
+    setCred({}); // reset fields when the PSP changes
+  };
+
+  const missing = required.filter((k) => {
+    const v = cred[k];
+    return v === undefined || v === null || (typeof v === 'string' && !v.trim());
+  });
+  const canSubmit = !!target && !!name.trim() && missing.length === 0 && !busy;
+
+  const submit = async () => {
+    if (!target || !canSubmit) return;
+    setBusy(true);
+    try {
+      const created = await adminOnboardGateway({
+        flow_target_id: target.id,
+        name: name.trim(),
+        credential: cred,
+        logo: target.logo ?? undefined,
+      });
+      onSaved(created);
+      toast.success(`${created.name} enabled`);
+      onClose();
+    } catch (e) {
+      toast.error(apiError(e, 'Could not enable this PSP.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls =
+    'w-full bg-[var(--fill)] border border-[var(--line)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] transition-colors';
+
+  // Render one credential field from its JSON-Schema property.
+  const field = (key: string) => {
+    const p = props[key] ?? {};
+    const label = p.title || key;
+    const req = required.includes(key);
+    const val = cred[key];
+    const set = (v: unknown) => setCred((c) => ({ ...c, [key]: v }));
+    const isSecret = p.format === 'password' || /secret|password|token|key|pass/i.test(key);
+
+    let control: React.ReactNode;
+    if (Array.isArray(p.enum)) {
+      control = (
+        <select className={inputCls} value={(val as string) ?? ''} onChange={(e) => set(e.target.value)}>
+          <option value="">Select…</option>
+          {p.enum.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      );
+    } else if (p.type === 'boolean') {
+      control = <Toggle on={!!val} busy={false} onClick={() => set(!val)} />;
+    } else if (p.type === 'number' || p.type === 'integer') {
+      control = (
+        <input type="number" className={inputCls} value={(val as number) ?? ''} onChange={(e) => set(e.target.value === '' ? undefined : Number(e.target.value))} />
+      );
+    } else {
+      control = (
+        <input
+          type={isSecret ? 'password' : 'text'}
+          autoComplete="off"
+          className={inputCls}
+          value={(val as string) ?? ''}
+          onChange={(e) => set(e.target.value)}
+        />
+      );
+    }
+
+    return (
+      <div key={key} className="mt-3">
+        <label className="block text-xs text-[var(--ink-3)] mb-1.5">
+          {label}
+          {req && <span className="text-red-400"> *</span>}
+        </label>
+        {control}
+        {p.description && <p className="text-[11px] text-[var(--ink-4)] mt-1">{p.description}</p>}
+      </div>
+    );
+  };
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add payment gateway from Fluxway"
+        className="animate-modal-in relative w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl bg-[var(--elevated)] border border-[var(--line-strong)] shadow-2xl p-5"
+      >
+        <h2 className="text-base font-semibold text-[var(--ink)]">Add payment gateway</h2>
+        <p className="text-xs text-[var(--ink-3)] mt-1">
+          Choose a PSP from Fluxway — its credential fields appear below. Submitting enables it at brand level.
+        </p>
+
+        <label className="block text-xs text-[var(--ink-3)] mt-4 mb-1.5">PSP</label>
+        <select className={inputCls} value={targetId} onChange={(e) => pick(targets.find((t) => t.id === e.target.value) ?? null)}>
+          <option value="">Select a PSP…</option>
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+
+        {target && (
+          <>
+            <label className="block text-xs text-[var(--ink-3)] mt-3 mb-1.5">Display name</label>
+            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder={target.name} />
+
+            {Object.keys(props).length > 0 ? (
+              <div className="mt-4 pt-3 border-t border-[var(--line)]">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-4)]">Credentials</p>
+                {Object.keys(props).map(field)}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--ink-4)] mt-4">This PSP defines no credential fields.</p>
+            )}
+          </>
+        )}
+
+        <div className="flex items-center justify-between gap-2 mt-5">
+          <button onClick={onManual} className="text-xs text-[var(--ink-4)] hover:text-[var(--ink-2)] transition-colors">
+            Add manually instead
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="text-sm font-medium text-[var(--ink-3)] hover:text-[var(--ink)] px-4 py-2 rounded-lg hover:bg-[var(--fill)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={!canSubmit}
+              className="text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2 hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {busy ? 'Enabling…' : 'Enable PSP'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function PaymentGatewaysTab() {
+  const [gateways, setGateways] = useState<PaymentGateway[]>([]);
+  const [catalog, setCatalog] = useState<GatewayCatalog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<PaymentGateway | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [onboarding, setOnboarding] = useState(false);
+  const [confirmDel, setConfirmDel] = useState<PaymentGateway | null>(null);
+
+  useEffect(() => {
+    adminListGateways()
+      .then(setGateways)
+      .catch((e) => toast.error(apiError(e, 'Could not load payment gateways.')))
+      .finally(() => setLoading(false));
+    // Best-effort: the Fluxway PSP catalog drives the "Add" picker. If it's not
+    // configured or unreachable, we silently fall back to manual add.
+    adminGatewayCatalog().then(setCatalog).catch(() => setCatalog({ configured: false, flow_type: null, targets: [] }));
+  }, []);
+
+  const canOnboard = !!catalog?.configured && (catalog?.targets.length ?? 0) > 0;
+  const openAdd = () => (canOnboard ? setOnboarding(true) : setAdding(true));
+
+  // Close the open row menu on any outside click.
+  useEffect(() => {
+    if (menuId === null) return;
+    const close = () => setMenuId(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [menuId]);
+
+  const sorted = useMemo(
+    () => [...gateways].sort((a, b) => (sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))),
+    [gateways, sortAsc]
+  );
+
+  // Optimistic single-field toggle (deposit / withdrawal / active): flip the row
+  // immediately, persist, and roll back if the request fails.
+  const toggle = async (g: PaymentGateway, p: Partial<PaymentGatewayInput>) => {
+    setGateways((gs) => gs.map((x) => (x.id === g.id ? { ...x, ...p } : x)));
+    try {
+      const updated = await adminUpdateGateway(g.id, p);
+      setGateways((gs) => gs.map((x) => (x.id === g.id ? updated : x)));
+    } catch (e) {
+      setGateways((gs) => gs.map((x) => (x.id === g.id ? g : x))); // rollback
+      toast.error(apiError(e, 'Could not update gateway.'));
+    }
+  };
+
+  const saveNew = async (g: PaymentGatewayInput) => {
+    try {
+      const created = await adminCreateGateway(g);
+      setGateways((gs) => [...gs, created]);
+      toast.success(`Added ${created.name}`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not add gateway.'));
+    }
+  };
+
+  const saveEdit = async (g: PaymentGatewayInput) => {
+    if (!editing) return;
+    try {
+      const updated = await adminUpdateGateway(editing.id, g);
+      setGateways((gs) => gs.map((x) => (x.id === updated.id ? updated : x)));
+      toast.success(`Updated ${updated.name}`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not update gateway.'));
+    }
+  };
+
+  const remove = async (g: PaymentGateway) => {
+    try {
+      await adminDeleteGateway(g.id);
+      setGateways((gs) => gs.filter((x) => x.id !== g.id));
+      toast.success(`Removed ${g.name}`);
+    } catch (e) {
+      toast.error(apiError(e, 'Could not remove gateway.'));
+    }
+  };
+
+  const th = 'text-left text-xs font-semibold text-[var(--ink-2)] px-4 py-3 whitespace-nowrap';
+  const td = 'px-4 py-3.5 align-middle';
+
+  return (
+    <>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h3 className={headingCls}>Payment Gateways</h3>
+          <p className={subCls}>
+            {loading ? 'Loading…' : `${gateways.length} configured`} · manage deposit & withdrawal methods.
+            {canOnboard && (
+              <span className="ml-1.5 inline-flex items-center gap-1 text-emerald-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Fluxway connected
+              </span>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={openAdd}
+          className="inline-flex items-center gap-1.5 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-4 py-2 hover:bg-[var(--accent-strong)] transition-colors flex-shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+          </svg>
+          Add
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--fill)]">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-[var(--line)] bg-[var(--fill-strong)]/50">
+              <th className={th}>Sr. No.</th>
+              <th className={th}>
+                <button
+                  onClick={() => setSortAsc((s) => !s)}
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)] transition-colors"
+                >
+                  Payment Method
+                  <span className="text-[var(--accent)]">{sortAsc ? '↑' : '↓'}</span>
+                </button>
+              </th>
+              <th className={th}>Deposit</th>
+              <th className={th}>Withdrawal</th>
+              <th className={th}>Logo</th>
+              <th className={th}>Active</th>
+              <th className={`${th} text-right`}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-14 text-center text-sm text-[var(--ink-4)]">Loading…</td>
+              </tr>
+            )}
+            {!loading && sorted.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-14 text-center">
+                  <p className="text-sm text-[var(--ink-3)]">No payment gateways yet.</p>
+                  <p className="text-xs text-[var(--ink-4)] mt-1">Click “Add” to configure your first method.</p>
+                </td>
+              </tr>
+            )}
+            {!loading && sorted.map((g, i) => (
+              <tr key={g.id} className="border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--fill-strong)]/30 transition-colors">
+                <td className={`${td} text-sm text-[var(--ink-3)] tabular-nums`}>{i + 1}</td>
+                <td className={`${td} text-sm font-medium text-[var(--ink)]`}>{g.name}</td>
+                <td className={td}>
+                  <button onClick={() => toggle(g, { deposit: !g.deposit })} title="Toggle deposit">
+                    <EnabledCell on={g.deposit} />
+                  </button>
+                </td>
+                <td className={td}>
+                  <button onClick={() => toggle(g, { withdrawal: !g.withdrawal })} title="Toggle withdrawal">
+                    <EnabledCell on={g.withdrawal} />
+                  </button>
+                </td>
+                <td className={td}>
+                  <div className="inline-flex items-center justify-center min-w-[120px] h-10 px-3 rounded-lg border border-[var(--line)] bg-[var(--base)]">
+                    {g.logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={g.logo} alt={g.name} className="max-h-6 max-w-[110px] object-contain" />
+                    ) : (
+                      <span className="text-sm font-semibold text-[var(--ink-2)] tracking-tight">{g.name}</span>
+                    )}
+                  </div>
+                </td>
+                <td className={td}>
+                  <button
+                    onClick={() => toggle(g, { active: !g.active })}
+                    className={`text-sm font-medium transition-colors ${g.active ? 'text-emerald-500 hover:text-emerald-600' : 'text-[var(--ink-4)] hover:text-[var(--ink-3)]'}`}
+                  >
+                    {g.active ? 'Active' : 'Inactive'}
+                  </button>
+                </td>
+                <td className={`${td} text-right`}>
+                  <div className="relative inline-block">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuId((m) => (m === g.id ? null : g.id));
+                      }}
+                      className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[var(--ink-4)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors"
+                      aria-label="Row actions"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+                      </svg>
+                    </button>
+                    {menuId === g.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-9 z-10 w-40 rounded-xl border border-[var(--line-strong)] bg-[var(--elevated)] shadow-xl py-1 text-left"
+                      >
+                        <button
+                          onClick={() => { setEditing(g); setMenuId(null); }}
+                          className="w-full text-left text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] px-3.5 py-2 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => { toggle(g, { active: !g.active }); setMenuId(null); }}
+                          className="w-full text-left text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] px-3.5 py-2 transition-colors"
+                        >
+                          {g.active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => { setConfirmDel(g); setMenuId(null); }}
+                          className="w-full text-left text-sm text-red-500 hover:bg-red-500/10 px-3.5 py-2 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {onboarding && catalog && (
+        <GatewayOnboardModal
+          targets={catalog.targets}
+          onSaved={(g) => setGateways((gs) => [...gs, g])}
+          onClose={() => setOnboarding(false)}
+          onManual={() => { setOnboarding(false); setAdding(true); }}
+        />
+      )}
+      {adding && <GatewayFormModal initial={null} onSave={saveNew} onClose={() => setAdding(false)} />}
+      {editing && <GatewayFormModal initial={editing} onSave={saveEdit} onClose={() => setEditing(null)} />}
+      {confirmDel && (
+        <ConfirmModal
+          title="Delete payment gateway"
+          message={`Remove ${confirmDel.name}? This hides it from deposits and withdrawals.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => remove(confirmDel)}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Shell ─────────────────────────────────────────────────────────────────────
 const navIcon = (key: Tab) => {
   const cls = 'w-4 h-4';
@@ -2902,6 +3467,10 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M3 6l.5 6.5a2 2 0 00.58 1.26l6.66 6.66a2 2 0 002.83 0l5.5-5.5a2 2 0 000-2.83L12.41 5.43A2 2 0 0011 4.85L4.5 4.35A1.5 1.5 0 003 5.85V6z" /></svg>
     );
+  if (key === 'payments')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>
+    );
   if (key === 'reviews')
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
@@ -2934,6 +3503,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
     { key: 'users', label: 'Users' },
     { key: 'apps', label: 'Developers' },
     { key: 'plans', label: 'Plans' },
+    { key: 'payments', label: 'Payment Gateways' },
     { key: 'reviews', label: 'Code Reviews' },
     { key: 'broadcast', label: 'Announcements' },
     { key: 'invites', label: 'Invites' },
@@ -2997,6 +3567,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
           {tab === 'users' && <UsersTab />}
           {tab === 'apps' && <AppsTab />}
           {tab === 'plans' && <PlansTab />}
+          {tab === 'payments' && <PaymentGatewaysTab />}
           {tab === 'reviews' && <CodeReviewsTab />}
           {tab === 'broadcast' && <BroadcastTab />}
           {tab === 'invites' && <InvitesTab />}

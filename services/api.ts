@@ -904,6 +904,137 @@ export async function adminDeletePlan(key: string): Promise<void> {
   await client.delete(`/admin/plans/${key}`);
 }
 
+// ── Payment Gateways (admin: manage deposit/withdrawal methods) ──
+// The UI uses short field names (deposit/withdrawal); the backend stores
+// deposit_enabled/withdrawal_enabled — translate at this boundary so the
+// component stays simple.
+export interface PaymentGateway {
+  id: number;
+  name: string;
+  description?: string;
+  logo?: string;
+  deposit: boolean;
+  withdrawal: boolean;
+  active: boolean;
+  provider_code?: string;
+}
+
+export interface PaymentGatewayInput {
+  name: string;
+  description?: string;
+  logo?: string;
+  deposit: boolean;
+  withdrawal: boolean;
+  active: boolean;
+  provider_code?: string;
+}
+
+interface GatewayRow {
+  id: number;
+  name: string;
+  description: string | null;
+  logo: string | null;
+  deposit_enabled: boolean;
+  withdrawal_enabled: boolean;
+  active: boolean;
+  provider_code: string | null;
+}
+
+function gatewayFromRow(r: GatewayRow): PaymentGateway {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description ?? undefined,
+    logo: r.logo ?? undefined,
+    deposit: r.deposit_enabled,
+    withdrawal: r.withdrawal_enabled,
+    active: r.active,
+    provider_code: r.provider_code ?? undefined,
+  };
+}
+
+function gatewayToBody(g: Partial<PaymentGatewayInput>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (g.name !== undefined) body.name = g.name;
+  if (g.description !== undefined) body.description = g.description;
+  if (g.logo !== undefined) body.logo = g.logo;
+  if (g.deposit !== undefined) body.deposit_enabled = g.deposit;
+  if (g.withdrawal !== undefined) body.withdrawal_enabled = g.withdrawal;
+  if (g.active !== undefined) body.active = g.active;
+  if (g.provider_code !== undefined) body.provider_code = g.provider_code;
+  return body;
+}
+
+export async function adminListGateways(): Promise<PaymentGateway[]> {
+  const res = await client.get<{ gateways: GatewayRow[] }>('/admin/payment-gateways');
+  return (res.data.gateways ?? []).map(gatewayFromRow);
+}
+
+export async function adminCreateGateway(input: PaymentGatewayInput): Promise<PaymentGateway> {
+  const res = await client.post<GatewayRow>('/admin/payment-gateways', gatewayToBody(input));
+  return gatewayFromRow(res.data);
+}
+
+export async function adminUpdateGateway(
+  id: number,
+  patch: Partial<PaymentGatewayInput>,
+): Promise<PaymentGateway> {
+  const res = await client.patch<GatewayRow>(`/admin/payment-gateways/${id}`, gatewayToBody(patch));
+  return gatewayFromRow(res.data);
+}
+
+export async function adminDeleteGateway(id: number): Promise<void> {
+  await client.delete(`/admin/payment-gateways/${id}`);
+}
+
+// ── Fluxway PSP orchestration: live catalog + schema-driven onboarding ──
+export interface JsonSchemaProp {
+  type?: string;
+  title?: string;
+  description?: string;
+  format?: string;
+  enum?: string[];
+  default?: unknown;
+}
+export interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProp>;
+  required?: string[];
+}
+
+export interface GatewayTarget {
+  id: string;
+  name: string;
+  logo?: string | null;
+  credential_schema?: JsonSchema | null;
+  operations: { flow_action_id: string; flow_definition_id: string }[];
+}
+
+export interface GatewayCatalog {
+  configured: boolean;
+  flow_type: string | null;
+  targets: GatewayTarget[];
+}
+
+export interface GatewayOnboardInput {
+  flow_target_id: string;
+  name: string;
+  credential: Record<string, unknown>;
+  description?: string;
+  logo?: string;
+  provider_code?: string;
+}
+
+export async function adminGatewayCatalog(): Promise<GatewayCatalog> {
+  const res = await client.get<GatewayCatalog>('/admin/payment-gateways/catalog');
+  return res.data;
+}
+
+export async function adminOnboardGateway(input: GatewayOnboardInput): Promise<PaymentGateway> {
+  const res = await client.post<GatewayRow>('/admin/payment-gateways/onboard', input);
+  return gatewayFromRow(res.data);
+}
+
 // ── Widget appearance (embeddable chat customization) ──
 export type CssStatus = 'none' | 'pending' | 'approved' | 'rejected';
 
