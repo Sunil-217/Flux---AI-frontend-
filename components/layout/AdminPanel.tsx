@@ -3190,7 +3190,6 @@ function PaymentGatewaysTab() {
   const [catalog, setCatalog] = useState<GatewayCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortAsc, setSortAsc] = useState(true);
-  const [menuId, setMenuId] = useState<number | null>(null);
   const [editing, setEditing] = useState<PaymentGateway | null>(null);
   const [adding, setAdding] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
@@ -3208,14 +3207,6 @@ function PaymentGatewaysTab() {
 
   const canOnboard = !!catalog?.configured && (catalog?.targets.length ?? 0) > 0;
   const openAdd = () => (canOnboard ? setOnboarding(true) : setAdding(true));
-
-  // Close the open row menu on any outside click.
-  useEffect(() => {
-    if (menuId === null) return;
-    const close = () => setMenuId(null);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [menuId]);
 
   const sorted = useMemo(
     () => [...gateways].sort((a, b) => (sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))),
@@ -3266,8 +3257,9 @@ function PaymentGatewaysTab() {
     }
   };
 
-  const th = 'text-left text-xs font-semibold text-[var(--ink-2)] px-4 py-3 whitespace-nowrap';
+  const th = 'text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-3)] px-4 py-3 whitespace-nowrap';
   const td = 'px-4 py-3.5 align-middle';
+  const actionBtn = 'text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40';
 
   return (
     <>
@@ -3297,7 +3289,7 @@ function PaymentGatewaysTab() {
       <div className="overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--fill)]">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-[var(--line)] bg-[var(--fill-strong)]/50">
+            <tr className="border-b border-[var(--line)] bg-[var(--fill-strong)]">
               <th className={th}>Sr. No.</th>
               <th className={th}>
                 <button
@@ -3362,44 +3354,25 @@ function PaymentGatewaysTab() {
                   </button>
                 </td>
                 <td className={`${td} text-right`}>
-                  <div className="relative inline-block">
+                  <div className="inline-flex items-center gap-1.5 justify-end">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuId((m) => (m === g.id ? null : g.id));
-                      }}
-                      className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[var(--ink-4)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)] transition-colors"
-                      aria-label="Row actions"
+                      onClick={() => setEditing(g)}
+                      className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
                     >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
-                      </svg>
+                      Edit
                     </button>
-                    {menuId === g.id && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute right-0 top-9 z-10 w-40 rounded-xl border border-[var(--line-strong)] bg-[var(--elevated)] shadow-xl py-1 text-left"
-                      >
-                        <button
-                          onClick={() => { setEditing(g); setMenuId(null); }}
-                          className="w-full text-left text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] px-3.5 py-2 transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => { toggle(g, { active: !g.active }); setMenuId(null); }}
-                          className="w-full text-left text-sm text-[var(--ink-2)] hover:bg-[var(--fill)] px-3.5 py-2 transition-colors"
-                        >
-                          {g.active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => { setConfirmDel(g); setMenuId(null); }}
-                          className="w-full text-left text-sm text-red-500 hover:bg-red-500/10 px-3.5 py-2 transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => toggle(g, { active: !g.active })}
+                      className={`${actionBtn} border-[var(--line)] text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--fill-strong)]`}
+                    >
+                      {g.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDel(g)}
+                      className={`${actionBtn} border-red-400/40 text-red-400 hover:bg-red-400/10`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
