@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -36,6 +36,13 @@ import {
   CODE_FONT_OPTIONS,
   applyCodeFont,
 } from '@/components/layout/AccentPicker';
+import {
+  APP_TEMPLATES,
+  TEMPLATES_BY_KEY,
+  applyTemplate,
+  currentTemplate,
+  clearTemplateMark,
+} from '@/lib/appTemplates';
 import { ttsSpeak } from '@/services/api';
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import type { FeatureKey } from '@/lib/features';
@@ -140,6 +147,97 @@ function Row({ title, desc, children }: { title: string; desc?: string; children
         {desc && <p className="text-xs text-[var(--ink-3)] mt-0.5">{desc}</p>}
       </div>
       <div className="flex-shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * One-click looks. Each swatch previews the template's own accent gradient so
+ * the grid is scannable without applying anything — you pick by eye, not by
+ * reading fifty names.
+ */
+function TemplatePicker({
+  value,
+  onApplied,
+}: {
+  value: string;
+  onApplied: (key: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? APP_TEMPLATES.filter(
+        (t) => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
+      )
+    : APP_TEMPLATES;
+
+  const pick = (key: string) => {
+    if (!applyTemplate(key)) return;
+    onApplied(key);
+    toast.success(`${TEMPLATES_BY_KEY[key].label} applied`);
+  };
+
+  return (
+    <div className="py-4 border-b border-[var(--line)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[var(--ink)]">App template</p>
+          <p className="text-xs text-[var(--ink-3)] mt-0.5">
+            A ready-made look — theme, accent, fonts, text size and spacing in one pick.
+            Change any of them below afterwards.
+          </p>
+        </div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${APP_TEMPLATES.length} templates…`}
+          aria-label="Search templates"
+          className="w-full sm:w-56 flex-shrink-0 rounded-lg border border-[var(--line)] bg-[var(--base)] px-3 py-1.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-3)] outline-none focus:border-[var(--line-strong)]"
+        />
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="text-sm text-[var(--ink-3)] py-4">No templates match “{query}”.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[22rem] overflow-y-auto pr-1">
+          {shown.map((tpl) => {
+            const vars = ACCENTS[tpl.accent]?.vars ?? {};
+            const active = value === tpl.key;
+            return (
+              <button
+                key={tpl.key}
+                onClick={() => pick(tpl.key)}
+                title={tpl.description}
+                aria-pressed={active}
+                className={`text-left rounded-xl border p-2.5 transition-colors ${
+                  active
+                    ? 'border-[var(--accent)] bg-[var(--fill-strong)]'
+                    : 'border-[var(--line)] bg-[var(--base)] hover:border-[var(--line-strong)]'
+                }`}
+              >
+                <span
+                  className="block h-7 w-full rounded-md mb-2"
+                  style={{
+                    background: `linear-gradient(135deg, ${vars['--grad-from']}, ${vars['--grad-mid']}, ${vars['--grad-to']})`,
+                  }}
+                />
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-[var(--ink)] truncate">{tpl.label}</span>
+                  {active && (
+                    <svg className="w-3 h-3 flex-shrink-0 text-[var(--accent)]" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </span>
+                <span className="block text-[10px] text-[var(--ink-3)] mt-0.5 capitalize">
+                  {tpl.theme} · {tpl.density}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -866,6 +964,36 @@ export function SettingsModal({
   const [notify, setNotify] = useState(
     typeof window !== 'undefined' && localStorage.getItem(NOTIF_KEY) === 'on'
   );
+
+  // Which template the current look came from, '' once any single control is
+  // changed by hand — at that point it is no longer that template.
+  const [template, setTemplate] = useState(currentTemplate);
+
+  const unmarkTemplate = useCallback(() => {
+    setTemplate('');
+    clearTemplateMark();
+  }, []);
+
+  /**
+   * Re-read the appearance settings after a template writes them.
+   *
+   * A template is applied by writing the same keys these controls own, so
+   * without this the screen would change while every picker still highlighted
+   * the old value.
+   */
+  const syncAppearanceFromStorage = useCallback(() => {
+    try {
+      setTheme(document.documentElement.classList.contains('light') ? 'light' : 'dark');
+      setAccent(localStorage.getItem(ACCENT_KEY) || 'red');
+      setTextSize(localStorage.getItem(TEXT_SIZE_KEY) || 'medium');
+      setFont(localStorage.getItem(FONT_KEY) || 'default');
+      setCodeFont(localStorage.getItem(CODE_FONT_KEY) || 'default');
+      setDensity(localStorage.getItem(DENSITY_KEY) || 'comfortable');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const t = useT();
   // The language is shared app-wide, so read it from the store rather than
   // mirroring it in local state.
@@ -945,6 +1073,7 @@ export function SettingsModal({
   };
 
   const pickAccent = (a: string) => {
+    unmarkTemplate();
     applyAccent(a);
     setAccent(a);
     try {
@@ -954,6 +1083,7 @@ export function SettingsModal({
     }
   };
   const pickTextSize = (s: string) => {
+    unmarkTemplate();
     applyTextSize(s);
     setTextSize(s);
     try {
@@ -989,6 +1119,7 @@ export function SettingsModal({
     }
   };
   const pickFont = (f: string) => {
+    unmarkTemplate();
     applyFont(f);
     setFont(f);
     try {
@@ -998,6 +1129,7 @@ export function SettingsModal({
     }
   };
   const pickCodeFont = (f: string) => {
+    unmarkTemplate();
     applyCodeFont(f);
     setCodeFont(f);
     try {
@@ -1007,6 +1139,7 @@ export function SettingsModal({
     }
   };
   const pickDensity = (d: string) => {
+    unmarkTemplate();
     applyDensity(d);
     setDensity(d);
     try {
@@ -1294,12 +1427,20 @@ export function SettingsModal({
                   <h3 className={headingCls}>Appearance</h3>
                   <p className={subCls}>Customize how the app looks and feels.</p>
                 </div>
+                <TemplatePicker
+                  value={template}
+                  onApplied={(k) => {
+                    setTemplate(k);
+                    syncAppearanceFromStorage();
+                  }}
+                />
                 <Row title="Theme" desc="Use a light or dark interface.">
                   <div className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--base)] p-0.5">
                     {(['light', 'dark'] as const).map((t) => (
                       <button
                         key={t}
                         onClick={() => {
+                          unmarkTemplate();
                           setHtmlTheme(t);
                           setTheme(t);
                         }}
