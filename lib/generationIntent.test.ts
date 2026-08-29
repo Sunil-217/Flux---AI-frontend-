@@ -159,3 +159,83 @@ describe('guards that must not weaken', () => {
     expect(detectImageRequest('   ')).toBeNull();
   });
 });
+
+
+// ── Romanised Tamil / Telugu / Hindi ─────────────────────────────────────────
+// People type to this app in their own language far more than in textbook
+// English. Each of these languages draws the same show/tell line English does
+// — kaatu vs sollu, chupinchu vs cheppu, dikhao vs batao — and the detection
+// follows that line rather than keyword-matching on the media noun.
+
+describe('Tanglish image requests', () => {
+  it.each([
+    ['Vijay image kaatu', 'Vijay'],
+    ['Vijay padam kaatu da', 'Vijay'],
+    ['enaku oru cat image venum', 'cat'],
+    ['oru dog padam podu', 'dog'],
+    ['Vijay photo venum da', 'Vijay'],
+    ['naku Vijay image kudu', 'Vijay'],
+    ['cat padam varai', 'cat'],
+    ['enakku oru sunset padam venum', 'sunset'],
+  ])('%s -> image of %s', (text, topic) => {
+    expect(route(text)).toBe('image');
+    expect(detectImageRequest(text)?.topic).toBe(topic);
+  });
+});
+
+describe('Telglish image requests', () => {
+  it.each([
+    ['Vijay photo chupinchu', 'Vijay'],
+    ['naaku oka cat chitram kavali', 'cat'],
+    ['dog bomma chupinchu', 'dog'],
+    ['oka sunset photo kavali', 'sunset'],
+  ])('%s -> image of %s', (text, topic) => {
+    expect(route(text)).toBe('image');
+    expect(detectImageRequest(text)?.topic).toBe(topic);
+  });
+});
+
+describe('Hinglish image requests', () => {
+  it.each([
+    ['Vijay ki photo dikhao', 'Vijay'],
+    ['mujhe ek cat image chahiye', 'cat'],
+    ['dog ka photo banao', 'dog'],
+    ['ek sunset ki tasveer banao', 'sunset'],
+  ])('%s -> image of %s', (text, topic) => {
+    expect(route(text)).toBe('image');
+    expect(detectImageRequest(text)?.topic).toBe(topic);
+  });
+});
+
+describe('regional questions ABOUT images stay in chat', () => {
+  it.each([
+    // Tamil — question word trailing is ordinary word order here.
+    'image generation na enna',
+    'image model nu enna',
+    'image generation pathi sollu',
+    'diffusion model epdi work agudhu',
+    'AI image generation epdi velai seyyudhu',
+    // Telugu
+    'image generation ante enti',
+    'image generation gurinchi cheppu',
+    // Hindi
+    'image generation kya hai',
+    'image generation ke baare mein batao',
+    'diffusion model kaise kaam karta hai',
+  ])('%s', (text) => {
+    expect(route(text)).toBe('chat');
+  });
+});
+
+describe('the show/tell split holds across languages', () => {
+  it.each([
+    ['Vijay image kaatu', 'image'],   // Tamil show
+    ['Vijay image pathi sollu', 'chat'],  // Tamil tell
+    ['Vijay photo chupinchu', 'image'],   // Telugu show
+    ['Vijay photo gurinchi cheppu', 'chat'], // Telugu tell
+    ['Vijay ki photo dikhao', 'image'],   // Hindi show
+    ['Vijay photo ke baare mein batao', 'chat'], // Hindi tell
+  ])('%s -> %s', (text, expected) => {
+    expect(route(text)).toBe(expected);
+  });
+});
