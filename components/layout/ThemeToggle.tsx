@@ -1,7 +1,15 @@
 'use client';
 
+import { clearSurface, clearTemplateMark } from '@/lib/appTemplates';
+
 export function ThemeToggle() {
   const toggle = () => {
+    // An app template pins its palette as inline `!important` variables, which
+    // outrank the :root / .light blocks — so swapping the class alone would
+    // change nothing and this button would look broken. Asking for light or
+    // dark means asking for the normal theme, so the surface is released.
+    clearSurface();
+    clearTemplateMark();
     const root = document.documentElement;
     const next = root.classList.contains('light') ? 'dark' : 'light';
     root.classList.remove('light', 'dark');

@@ -19,8 +19,9 @@ import {
   templateTheme,
   clearTemplateMark,
   currentTemplate,
+  clearSurface,
 } from './appTemplates';
-import { SURFACES } from './surfaces';
+import { SURFACES, SURFACE_VAR_NAMES } from './surfaces';
 
 beforeEach(() => {
   localStorage.clear();
@@ -201,5 +202,48 @@ describe('a template changes the whole app, not just the accent', () => {
 
   it('uses a spread of surfaces rather than one dark and one light', () => {
     expect(new Set(APP_TEMPLATES.map((t) => t.surface)).size).toBeGreaterThan(8);
+  });
+});
+
+
+describe('the light/dark toggle still works after a template', () => {
+  // Reported as "this doesn't work": a template pins its palette as inline
+  // `!important` variables, which outrank the :root / .light blocks. Flipping
+  // the class alone changed nothing on screen and the button looked dead.
+
+  it('releases the surface variables from the document', () => {
+    applyTemplate('forest');
+    expect(document.documentElement.style.getPropertyValue('--base')).not.toBe('');
+    clearSurface();
+    for (const v of SURFACE_VAR_NAMES) {
+      expect(document.documentElement.style.getPropertyValue(v), v).toBe('');
+    }
+  });
+
+  it('keeps the accent — asking for light mode is not giving up your colour', () => {
+    applyTemplate('forest');
+    const accent = ACCENTS[TEMPLATES_BY_KEY.forest.accent].vars['--accent'];
+    clearSurface();
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe(accent);
+  });
+
+  it('drops the surface from storage so it does not come back on reload', () => {
+    applyTemplate('forest');
+    clearSurface();
+    const stored = JSON.parse(localStorage.getItem('close_ai_accent_vars') || '{}');
+    for (const v of SURFACE_VAR_NAMES) {
+      expect(v in stored, v).toBe(false);
+    }
+    expect(stored['--accent']).toBeTruthy();
+  });
+
+  it('covers every variable a surface writes', () => {
+    // If a surface gains a variable that SURFACE_VAR_NAMES misses, that one
+    // would survive clearSurface and quietly override the theme forever.
+    for (const s of Object.values(SURFACES)) {
+      for (const v of Object.keys(s.vars)) {
+        expect(SURFACE_VAR_NAMES, `${v} not covered`).toContain(v);
+      }
+    }
   });
 });
