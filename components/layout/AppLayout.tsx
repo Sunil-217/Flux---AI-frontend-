@@ -56,6 +56,11 @@ import {
   uploadVideo,
   extractMemory,
 } from '@/services/api';
+import {
+  detectImageRequest,
+  extractTopic,
+  isGenerationCandidate,
+} from '@/lib/generationIntent';
 import type { HistoryMessage } from '@/services/api';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -587,31 +592,11 @@ export function AppLayout() {
         handleQuiz('', text);
         return;
       }
-      const looksLikeCode = /\b(function|code|class|method|api|endpoint|script|program|backend|frontend|server|route|database|sql|html|css|javascript|typescript|python|java|component|library|framework|module|import|return|variable|array|loop)\b/i.test(content);
-      const tooLong = content.length > 400;
-      // Questions are requests for information, not generation.
-      const isQuestion =
-        /^(what|how|why|when|where|who|which|whose|whom|is|are|am|was|were|can|could|would|should|shall|do|does|did|will|may|might|explain|define|describe|tell|list|name|difference|compare)\b/i.test(text) ||
-        text.endsWith('?');
-
-      // Strip verbs / media nouns / filler to reveal the explicit topic, if any.
-      // Empty result ⇒ the request is contextual ("make it a pdf") and the topic
-      // comes from the previous message instead.
-      const extractTopic = (s: string): string =>
-        s
-          .replace(/\b(please|kindly|pls|can you|could you|i want|i need|i'd like|give me|make me|get me)\b/gi, ' ')
-          .replace(/\b(convert|make|turn|change|save|export|download|generate|create|write|draft|build|produce|prepare|render|design|draw|sketch|illustrate|paint|show|summari[sz]e)\b/gi, ' ')
-          .replace(/\b(it|this|that|these|those|the|a|an|some|my|our|your|me|us)\b/gi, ' ')
-          .replace(/\b(into|onto|to|as|has|in|now|just|also|then|and|please)\b/gi, ' ')
-          .replace(/\b(pdf|document|doc|report|brief|paper|file|format|version|image|picture|photo|pic|drawing|illustration|art|artwork|painting|sketch)\b/gi, ' ')
-          // Office-document format nouns (so "make an excel sheet of X" → "X").
-          .replace(/\b(excel|spreadsheet|xlsx|workbook|sheet|word|docx|ppt|pptx|powerpoint|presentation|slides?|deck|content|data|info|information|table)\b/gi, ' ')
-          // Common Tanglish/Hinglish connecting particles that aren't topic words.
-          .replace(/\b(ha|aa|da|na|naku|enaku|yenaku|venum|vendum|kudu|kodu|pannu|panni)\b/gi, ' ')
-          .replace(/\b(about|on|for|of|regarding|concerning|covering|titled|called|explaining)\b/gi, ' ')
-          .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+      // Intent detection lives in lib/generationIntent so it can be tested
+      // directly. It strips a polite wrapper first ("can you draw a dog" is a
+      // request, not a question) and no longer treats a bare trailing "?" as
+      // disqualifying when the message clearly asks for something to be made.
+      const canGenerate = isGenerationCandidate(text);
 
       // Most-recent meaningful user message — the topic for contextual requests.
       const lastUserTopic = (): string | null => {
@@ -682,10 +667,6 @@ export function AppLayout() {
         /\bpdf\b/i.test(content) ||
         (/\b(make|create|write|generate|draft|build|produce|prepare|convert|turn|export|save|download)\b/i.test(content) &&
           /\b(document|report|brief|paper)\b/i.test(content));
-      const wantsImage =
-        /^\s*(?:please\s+)?(draw|sketch|illustrate|paint)\b/i.test(content) ||
-        (/\b(make|create|generate|render|produce|design|draw|show|convert|turn|give|want)\b/i.test(content) &&
-          /\b(image|picture|photo|drawing|illustration|art|artwork|painting|sketch|pic)\b/i.test(content));
       const wantsExcel =
         /\b(excel|spreadsheet|xlsx|workbook)\b/i.test(content) && GEN_VERB.test(content);
       const wantsWord =
@@ -693,7 +674,7 @@ export function AppLayout() {
       const wantsPpt =
         /\b(ppt|pptx|powerpoint|presentation|slides?|deck)\b/i.test(content) && GEN_VERB.test(content);
 
-      if (!startsWithSlash && !looksLikeCode && !tooLong && !isQuestion && text.length > 0) {
+      if (canGenerate) {
         // Excel/Word/PPT checked BEFORE PDF so "make an excel report" hits excel, not pdf.
         if (wantsExcel) {
           const r = buildDocRequest('excel');
@@ -711,11 +692,16 @@ export function AppLayout() {
           const r = buildDocRequest('pdf');
           if (r) { handleSlashGenerate('pdf', r.prompt, r.label); return; }
         }
-        if (wantsImage) {
-          const explicit = extractTopic(text);
-          const topic = explicit.length >= 2 ? explicit : lastUserTopic();
+        const imageRequest = detectImageRequest(text);
+        if (imageRequest) {
+          // An empty topic means the subject came earlier ("draw it") — reuse
+          // the last one. The topic is the user's own words, never expanded:
+          // the whole bug was the model turning "Vijay" into a biography.
+          const topic = imageRequest.topic.length >= 2 ? imageRequest.topic : lastUserTopic();
           if (topic) {
-            handleSlashGenerate('image', topic);
+            // `text` is passed as the display label so the bubble keeps the
+            // user's actual wording instead of showing "/image Vijay".
+            handleSlashGenerate('image', topic, text);
             return;
           }
         }
