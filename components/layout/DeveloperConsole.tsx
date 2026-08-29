@@ -168,7 +168,7 @@ function CreateAppModal({
                 </button>
               </div>
               <p className="text-[10px] text-[var(--ink-4)] leading-relaxed">
-                For embedding the chat widget you'll use a separate public token — always available under Integration.
+                For embedding the chat widget you&apos;ll use a separate public token — always available under Integration.
               </p>
             </div>
             <div className="relative flex justify-end">
@@ -518,7 +518,7 @@ function IntegrationTab({ kb }: { kb: KbInfo }) {
         <div className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/6 px-4 py-3">
           <p className="text-xs text-[var(--ink-2)] leading-relaxed">
             Your <strong className="text-[var(--ink)]">widget token</strong> is public and safe to embed — it only answers
-            from this app's documents and can't access anything else.
+            from this app&apos;s documents and can&apos;t access anything else.
           </p>
         </div>
 
@@ -1060,7 +1060,7 @@ function InsightsTab({ kb }: { kb: KbInfo }) {
   };
 
   const maxDay = analytics ? Math.max(1, ...analytics.by_day.map((d) => d.count)) : 1;
-  const subBtn = (v: typeof view, label: string) =>
+  const subBtn = (v: typeof view) =>
     `px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
       view === v ? 'bg-[var(--elevated)] text-[var(--ink)] shadow-sm' : 'text-[var(--ink-3)] hover:text-[var(--ink-2)]'
     }`;
@@ -1068,9 +1068,9 @@ function InsightsTab({ kb }: { kb: KbInfo }) {
   return (
     <div>
       <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-xl bg-[var(--fill)] border border-[var(--line)]">
-        <button onClick={() => setView('overview')} className={subBtn('overview', '')}>Overview</button>
-        <button onClick={() => setView('conversations')} className={subBtn('conversations', '')}>Conversations</button>
-        <button onClick={() => setView('leads')} className={subBtn('leads', '')}>Leads</button>
+        <button onClick={() => setView('overview')} className={subBtn('overview')}>Overview</button>
+        <button onClick={() => setView('conversations')} className={subBtn('conversations')}>Conversations</button>
+        <button onClick={() => setView('leads')} className={subBtn('leads')}>Leads</button>
       </div>
 
       {/* Overview */}
@@ -1227,35 +1227,64 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
   const [loadingApps, setLoadingApps] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [kb, setKb] = useState<KbInfo | null>(null);
-  const [loadingKb, setLoadingKb] = useState(false);
+  const [kbFor, setKbFor] = useState<number | null>(null);
+  const loadingKb = selectedId != null && kbFor !== selectedId;
   const [sub, setSub] = useState<Sub>('knowledge');
   const [plans, setPlans] = useState<PlanTier[]>([]);
   const [showCreate, setShowCreate] = useState(false);
 
-  const loadApps = useCallback(async () => {
-    setLoadingApps(true);
-    try {
-      const ks = (await listApiKeys()).filter((k) => !k.revoked);
-      setApps(ks);
-      setSelectedId((prev) => prev ?? (ks.length > 0 ? ks[0].id : null));
-    } catch {
-      toast.error('Failed to load your apps.');
-    }
-    setLoadingApps(false);
-  }, []);
+  // Fetch without touching the spinner — `loadingApps` starts true for the
+  // mount load, and reloadApps() turns it back on for later refetches.
+  const loadApps = useCallback(
+    () =>
+      listApiKeys()
+        .then((keys) => {
+          const ks = keys.filter((k) => !k.revoked);
+          setApps(ks);
+          setSelectedId((prev) => prev ?? (ks.length > 0 ? ks[0].id : null));
+        })
+        .catch(() => toast.error('Failed to load your apps.'))
+        .finally(() => setLoadingApps(false)),
+    []
+  );
 
-  const loadKb = useCallback(async (id: number) => {
-    setLoadingKb(true);
+  const reloadApps = useCallback(async () => {
+    setLoadingApps(true);
+    await loadApps();
+  }, [loadApps]);
+
+  // `kbFor` records which app the loaded knowledge base belongs to — it's set
+  // on success *and* on failure, so the spinner is derived rather than tracked
+  // separately, and a failed load can't leave it spinning forever.
+  const refreshKb = useCallback(async (id: number) => {
     try {
       setKb(await getKb(id));
     } catch (e) {
       toast.error(apiError(e, 'Failed to load knowledge base.'));
     }
-    setLoadingKb(false);
+    setKbFor(id);
   }, []);
 
   useEffect(() => { loadApps(); getPlans().then(setPlans).catch(() => {}); }, [loadApps]);
-  useEffect(() => { if (selectedId != null) loadKb(selectedId); }, [selectedId, loadKb]);
+
+  // Load the selected app's knowledge base, cancelling if the selection moves on.
+  useEffect(() => {
+    if (selectedId == null) return;
+    let cancelled = false;
+    getKb(selectedId)
+      .then((info) => {
+        if (!cancelled) setKb(info);
+      })
+      .catch((e) => {
+        if (!cancelled) toast.error(apiError(e, 'Failed to load knowledge base.'));
+      })
+      .finally(() => {
+        if (!cancelled) setKbFor(selectedId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -1268,8 +1297,8 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
     try {
       await revokeApiKey(app.id);
       toast.success('App deleted.');
-      if (selectedId === app.id) { setSelectedId(null); setKb(null); }
-      await loadApps();
+      if (selectedId === app.id) { setSelectedId(null); setKb(null); setKbFor(null); }
+      await reloadApps();
     } catch (e) {
       toast.error(apiError(e, 'Failed to delete app.'));
     }
@@ -1421,7 +1450,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
               </div>
 
               <div key={sub} className="animate-fade-in">
-                {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => loadKb(kb.key_id)} />}
+                {sub === 'knowledge' && <KnowledgeTab kb={kb} onChange={() => refreshKb(kb.key_id)} />}
                 {sub === 'integration' && <IntegrationTab kb={kb} />}
                 {sub === 'appearance' && <AppearanceTab kb={kb} />}
                 {sub === 'insights' && <InsightsTab kb={kb} />}
@@ -1437,7 +1466,7 @@ export function DeveloperConsole({ onClose }: { onClose: () => void }) {
           onClose={() => setShowCreate(false)}
           onCreated={async (info) => {
             setShowCreate(false);
-            await loadApps();
+            await reloadApps();
             setSelectedId(info.id);
             setSub('knowledge');
           }}

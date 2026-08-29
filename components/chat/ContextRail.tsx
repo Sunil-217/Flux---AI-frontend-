@@ -29,6 +29,33 @@ const ACTIVE_PERSONA_KEY = 'close_ai_active_persona';
 const PERSONA_PROMPT_KEY = 'close_ai_persona_prompt';
 const RAIL_KEY = 'close_ai_rail_open';
 
+/** Small localStorage readers, used as lazy initial state (client-only render). */
+function readRailOpen(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
+
+function readPersonas(): Persona[] {
+  try {
+    const raw = localStorage.getItem(PERSONAS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function readActivePersonaId(): string {
+  try {
+    return localStorage.getItem(ACTIVE_PERSONA_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 function sourceKind(name: string): 'video' | 'repo' | 'page' | 'doc' {
   const n = name.toLowerCase();
   if (n.includes('youtube') || n.includes('youtu.be')) return 'video';
@@ -73,25 +100,14 @@ export function ContextRail({
   onQuiz: () => void;
 }) {
   const { enabled } = useFeatures();
-  const [open, setOpen] = useState(true);
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [activeId, setActiveId] = useState('');
+  const [open, setOpen] = useState(readRailOpen);
+  // Personas are edited in Settings, not here — read-only for the rail.
+  const [personas] = useState<Persona[]>(readPersonas);
+  const [activeId, setActiveId] = useState(readActivePersonaId);
   const [facts, setFacts] = useState<string[]>([]);
   const [pMenu, setPMenu] = useState(false); // persona dropdown open
 
   const msgCount = session?.messages?.length ?? 0;
-
-  useEffect(() => {
-    try {
-      setOpen(localStorage.getItem(RAIL_KEY) !== 'closed');
-      const raw = localStorage.getItem(PERSONAS_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      setPersonas(Array.isArray(arr) ? arr : []);
-      setActiveId(localStorage.getItem(ACTIVE_PERSONA_KEY) || '');
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // Memory grows as the conversation produces extractable facts — refresh when
   // the message count settles on a new value, so the rail stays live.

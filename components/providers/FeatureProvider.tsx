@@ -41,16 +41,19 @@ export function FeatureProvider({ children }: { children: React.ReactNode }) {
   // from the server. Fail-open everywhere: a fetch error keeps everything on.
   const [features, setFeatures] = useState<FeatureMap>(readCache);
 
-  const refresh = useCallback(async () => {
-    try {
-      const map = await getFeatures();
-      const merged = { ...DEFAULT_FEATURES, ...map };
-      setFeatures(merged);
-      writeCache(merged);
-    } catch {
-      /* keep the last-known (cached) map */
-    }
-  }, []);
+  const refresh = useCallback(
+    () =>
+      getFeatures()
+        .then((map) => {
+          const merged = { ...DEFAULT_FEATURES, ...map };
+          setFeatures(merged);
+          writeCache(merged);
+        })
+        .catch(() => {
+          /* keep the last-known (cached) map */
+        }),
+    []
+  );
 
   useEffect(() => {
     refresh();

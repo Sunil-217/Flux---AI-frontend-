@@ -13,6 +13,33 @@ import { useT } from '@/lib/i18n';
 import toast from 'react-hot-toast';
 import type { ChatSession, Folder } from '@/types';
 
+/** Web search defaults to on; only an explicit 'off' disables it. */
+function readWebOn(): boolean {
+  try {
+    return localStorage.getItem(WEB_SEARCH_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The documents this chat asks about — a saved subset, or all of them when
+ * nothing (valid) was saved.
+ */
+function readSelectedDocs(sessionId: string | undefined, uploadedFiles: string[]): string[] {
+  if (!sessionId) return [];
+  try {
+    const raw = localStorage.getItem(activeDocsKey(sessionId));
+    const saved = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(saved) && saved.length) {
+      return uploadedFiles.filter((f) => saved.includes(f));
+    }
+  } catch {
+    /* fall through to "all documents" */
+  }
+  return uploadedFiles;
+}
+
 interface Props {
   session: ChatSession | null;
   isLoading: boolean;
@@ -75,7 +102,10 @@ export function ChatArea({
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
-  const [webOn, setWebOn] = useState(true);
+  // Read the saved toggle straight into the initial state. This component only
+  // ever renders on the client (AppRoot gates on `ready`), so there is no
+  // server render to mismatch — and no extra render just to correct the value.
+  const [webOn, setWebOn] = useState(readWebOn);
   const [summary, setSummary] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -86,31 +116,21 @@ export function ChatArea({
   const moreRef = useRef<HTMLDivElement>(null);
   const [docOpen, setDocOpen] = useState(false);
   const docRef = useRef<HTMLDivElement>(null);
-  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>(() =>
+    readSelectedDocs(session?.id, uploadedFiles)
+  );
 
-  useEffect(() => {
-    setWebOn(localStorage.getItem(WEB_SEARCH_KEY) !== 'off');
-  }, []);
-
-  // Load the per-chat document selection (default: all docs).
-  useEffect(() => {
-    if (!session) {
-      setSelectedDocs([]);
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(activeDocsKey(session.id));
-      const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) {
-        setSelectedDocs(uploadedFiles.filter((f) => saved.includes(f)));
-      } else {
-        setSelectedDocs(uploadedFiles);
-      }
-    } catch {
-      setSelectedDocs(uploadedFiles);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, uploadedFiles.length]);
+  // Reset the document selection when you switch chats or the file list
+  // changes. Adjusting state during render (rather than in an effect) keeps the
+  // selection correct in the same pass, so the doc menu never flashes the
+  // previous chat's picks. See "Adjusting state when a prop changes" in the
+  // React docs.
+  const docsKey = `${session?.id ?? ''}:${uploadedFiles.length}`;
+  const [lastDocsKey, setLastDocsKey] = useState(docsKey);
+  if (lastDocsKey !== docsKey) {
+    setLastDocsKey(docsKey);
+    setSelectedDocs(readSelectedDocs(session?.id, uploadedFiles));
+  }
 
   useEffect(() => {
     if (!docOpen) return;

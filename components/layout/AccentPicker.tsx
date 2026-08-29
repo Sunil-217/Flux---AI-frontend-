@@ -142,17 +142,25 @@ export function applyCodeFont(key: string) {
   else document.documentElement.style.removeProperty('--code-font');
 }
 
+/** The saved accent, falling back to 'red' when unset or unrecognised. */
+function readAccent(): string {
+  try {
+    const saved = localStorage.getItem(ACCENT_KEY) || 'red';
+    return ACCENTS[saved] ? saved : 'red';
+  } catch {
+    return 'red';
+  }
+}
+
 export function AccentPicker() {
   const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState('red');
+  const [current, setCurrent] = useState(readAccent);
   const ref = useRef<HTMLDivElement>(null);
 
+  // Push the saved appearance settings onto <html>. These are DOM side effects
+  // (not state), so they belong in an effect; `current` is already seeded above.
   useEffect(() => {
-    const saved = (typeof window !== 'undefined' && localStorage.getItem(ACCENT_KEY)) || 'red';
-    if (ACCENTS[saved]) {
-      applyAccent(saved);
-      setCurrent(saved);
-    }
+    applyAccent(readAccent());
     applyTextSize((typeof window !== 'undefined' && localStorage.getItem(TEXT_SIZE_KEY)) || 'medium');
     applyFont((typeof window !== 'undefined' && localStorage.getItem(FONT_KEY)) || 'default');
     applyCodeFont((typeof window !== 'undefined' && localStorage.getItem(CODE_FONT_KEY)) || 'default');

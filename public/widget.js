@@ -31,7 +31,7 @@
   var origin;
   try {
     origin = new URL(script.src).origin;
-  } catch (e) {
+  } catch {
     origin = '';
   }
   var chatUrl = origin + '/embed/chat?app=' + encodeURIComponent(token);

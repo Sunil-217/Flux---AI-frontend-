@@ -69,16 +69,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** Save a data: URI (or URL) to the user's device with the given filename. */
-function triggerDownload(href: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
 export function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [followups, setFollowups] = useState<string[]>([]);
@@ -98,7 +88,7 @@ export function AppLayout() {
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
   const prevLoading = useRef(false);
 
-  const usePrompt = useCallback((text: string) => {
+  const insertPrompt = useCallback((text: string) => {
     setDraft((d) => ({ text, n: (d?.n ?? 0) + 1 }));
     setPromptLibOpen(false);
   }, []);
@@ -898,8 +888,13 @@ export function AppLayout() {
     },
   ];
 
-  // Clear follow-up suggestions when switching chats.
-  useEffect(() => setFollowups([]), [activeSessionId]);
+  // Clear follow-up suggestions when switching chats. Done during render so the
+  // new chat never shows the previous chat's suggestions, even for a frame.
+  const [followupsFor, setFollowupsFor] = useState(activeSessionId);
+  if (followupsFor !== activeSessionId) {
+    setFollowupsFor(activeSessionId);
+    setFollowups([]);
+  }
 
   // After a reply finishes, fetch follow-up question suggestions.
   useEffect(() => {
@@ -1032,7 +1027,7 @@ export function AppLayout() {
           onAddUrl={handleAddUrl}
           followups={followups}
           onPickFollowup={handleSendMessage}
-          onPickPrompt={usePrompt}
+          onPickPrompt={insertPrompt}
           injectText={draft}
           allSessions={sessions}
           allFolders={folders}
@@ -1043,7 +1038,7 @@ export function AppLayout() {
         <ContextRail
           session={activeSession}
           onAddUrl={handleAddUrl}
-          onResearch={() => usePrompt('/research ')}
+          onResearch={() => insertPrompt('/research ')}
           onQuiz={() => handleSendMessage('/quiz')}
         />
         </div>
@@ -1061,7 +1056,7 @@ export function AppLayout() {
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
 
       {promptLibOpen && (
-        <PromptLibraryModal onClose={() => setPromptLibOpen(false)} onUse={usePrompt} />
+        <PromptLibraryModal onClose={() => setPromptLibOpen(false)} onUse={insertPrompt} />
       )}
 
       {addUrlOpen && <AddUrlModal onClose={() => setAddUrlOpen(false)} onSubmit={submitUrl} />}

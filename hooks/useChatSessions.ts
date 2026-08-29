@@ -11,22 +11,25 @@ import type { ChatSession, Folder, Message } from '@/types';
 const ACTIVE_CHAT_KEY = 'close_ai_active_chat';
 const FOLDERS_KEY = 'close_ai_folders';
 
+function readFolders(): Folder[] {
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as Folder[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function useChatSessions() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [folders, setFolders] = useState<Folder[]>([]);
-
   // Folders live in localStorage (chat → folder assignment persists via the
-  // server blob through each session's folderId).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(FOLDERS_KEY);
-      if (raw) setFolders(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // server blob through each session's folderId). Read straight into the
+  // initial state — this hook only ever runs on the client.
+  const [folders, setFolders] = useState<Folder[]>(readFolders);
+
   const persistFolders = useCallback((next: Folder[]) => {
     setFolders(next);
     try {

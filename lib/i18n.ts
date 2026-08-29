@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 export const LANG_KEY = 'close_ai_lang';
 export type Lang = 'en' | 'ta';
@@ -59,14 +59,28 @@ export function translate(s: string, lang: Lang): string {
   return lang === 'ta' ? TA[s] ?? s : s;
 }
 
+// The language lives in localStorage, not in React — so it's an *external*
+// store. Subscribing to it with useSyncExternalStore (instead of copying it
+// into state from an effect) means the very first client render already has
+// the right language: no English flash, no cascading re-render.
+function subscribeLang(onChange: () => void) {
+  window.addEventListener(EVENT, onChange);
+  return () => window.removeEventListener(EVENT, onChange);
+}
+
+/** Reactive language hook — re-renders when the language changes. */
+export function useLang(): Lang {
+  // getLang() returns a primitive, so it's a stable snapshot; on the server
+  // (and during hydration) there's no localStorage, so default to English.
+  return useSyncExternalStore(subscribeLang, getLang, getServerLang);
+}
+
+function getServerLang(): Lang {
+  return 'en';
+}
+
 /** Reactive translator hook — re-renders when the language changes. */
 export function useT() {
-  const [lang, setL] = useState<Lang>('en');
-  useEffect(() => {
-    setL(getLang());
-    const h = () => setL(getLang());
-    window.addEventListener(EVENT, h);
-    return () => window.removeEventListener(EVENT, h);
-  }, []);
-  return (s: string) => translate(s, lang);
+  const lang = useLang();
+  return useCallback((s: string) => translate(s, lang), [lang]);
 }

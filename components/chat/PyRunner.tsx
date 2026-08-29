@@ -74,8 +74,12 @@ export function PyRunner({ code, runSignal, onRunningChange }: Props) {
   const [cleared, setCleared] = useState(false);
 
   const runningRef = useRef(false);
+  // `run` is memoised, so it reads the latest code through a ref. Updating the
+  // ref in an effect (not during render) keeps rendering side-effect free.
   const codeRef = useRef(code);
-  codeRef.current = code;
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
   const lastSignal = useRef(0);
 
   const run = useCallback(async () => {
