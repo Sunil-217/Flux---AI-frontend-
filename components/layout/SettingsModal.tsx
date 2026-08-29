@@ -172,6 +172,28 @@ function TemplatePicker({
       )
     : APP_TEMPLATES;
 
+  // The bottom fade tells you there is more to scroll to. Measured rather than
+  // assumed: the column count changes with the breakpoint and the row count
+  // changes with the search, so a filtered list that fits must not be dimmed.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const check = () => setScrollable(el.scrollHeight > el.clientHeight + 4);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shown.length]);
+
+  const fade = scrollable
+    ? {
+        maskImage: 'linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent)',
+        WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent)',
+      }
+    : undefined;
+
   const pick = (key: string) => {
     if (!applyTemplate(key)) return;
     onApplied(key);
@@ -200,7 +222,13 @@ function TemplatePicker({
       {shown.length === 0 ? (
         <p className="text-sm text-[var(--ink-3)] py-4">No templates match “{query}”.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[22rem] overflow-y-auto pr-1">
+        /* The list is 50 long, so it scrolls. Without the fade the clipped row
+           reads as a rendering bug rather than "there is more below". */
+        <div
+          ref={gridRef}
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[21rem] overflow-y-auto pr-1"
+          style={fade}
+        >
           {shown.map((tpl) => {
             const vars = ACCENTS[tpl.accent]?.vars ?? {};
             const active = value === tpl.key;
