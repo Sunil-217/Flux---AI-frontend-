@@ -258,34 +258,37 @@ function safeFilename(base: string, ext: string) {
   return `${clean}.${ext}`;
 }
 
+/**
+ * Convert a stored data URI → Blob URL. Blob URLs render reliably in iframes
+ * (data URIs can be blocked by newer browser sandboxing rules). Anything that
+ * isn't a data URI, or that fails to decode, is passed through untouched.
+ */
+function toBlobUrl(src: string): string {
+  if (!src.startsWith('data:')) return src;
+  try {
+    const comma = src.indexOf(',');
+    const header = src.slice(0, comma);
+    const mime = header.slice(5, header.indexOf(';'));
+    const b64 = src.slice(comma + 1);
+    const bytes = atob(b64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return URL.createObjectURL(new Blob([arr], { type: mime }));
+  } catch {
+    return src; // fallback: use the data URI directly
+  }
+}
+
 /* Full-screen PDF viewer — Blob URL so iframe renders reliably across browsers. */
 function PDFViewer({ src, filename, onClose }: { src: string; filename: string; onClose: () => void }) {
-  const [blobUrl, setBlobUrl] = useState('');
+  // The viewer is mounted per-open and keyed on the document URL, so `src`
+  // never changes underneath it — convert once and revoke on unmount.
+  const [blobUrl] = useState(() => toBlobUrl(src));
 
-  // Convert the stored data URI → Blob URL. Blob URLs work reliably in iframes
-  // (data URIs can be blocked by newer browser sandboxing rules).
   useEffect(() => {
-    if (!src) return;
-    let url = src;
-    let revoke = false;
-    if (src.startsWith('data:')) {
-      try {
-        const comma = src.indexOf(',');
-        const header = src.slice(0, comma);
-        const mime = header.slice(5, header.indexOf(';'));
-        const b64 = src.slice(comma + 1);
-        const bytes = atob(b64);
-        const arr = new Uint8Array(bytes.length);
-        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-        url = URL.createObjectURL(new Blob([arr], { type: mime }));
-        revoke = true;
-      } catch {
-        /* fallback: use data URI directly */
-      }
-    }
-    setBlobUrl(url);
-    return () => { if (revoke) URL.revokeObjectURL(url); };
-  }, [src]);
+    if (!blobUrl.startsWith('blob:')) return;
+    return () => URL.revokeObjectURL(blobUrl);
+  }, [blobUrl]);
 
   // Esc to close.
   useEffect(() => {
@@ -570,6 +573,10 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
   // Stop playback and free the object URL if the message unmounts mid-play.
   useEffect(() => {
     return () => {
+      // Deliberately the *latest* value: bumping the counter is what
+      // invalidates an in-flight TTS fetch, so snapshotting it (as the lint
+      // rule suggests) would stop the cancellation from working.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ttsReqRef.current++;
       audioRef.current?.pause();
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -901,6 +908,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
           <>
             {pdfViewer && (
               <PDFViewer
+                key={message.pdfUrl}
                 src={message.pdfUrl}
                 filename={message.pdfName || 'document.pdf'}
                 onClose={() => setPdfViewer(false)}
@@ -968,7 +976,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
         {/* Generated-video player (from /video slash command) */}
         {typeof message.videoUrl === 'string' && message.videoUrl.length > 0 && (
           <div className="mt-3 rounded-xl border border-[var(--line)] overflow-hidden bg-black/40">
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            {/* Generated clips have no caption track to attach. */}
             <video
               src={message.videoUrl}
               controls

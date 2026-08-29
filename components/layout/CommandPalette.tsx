@@ -42,9 +42,12 @@ export function CommandPalette({
     ...matchedChats.map((s) => ({ kind: 'chat' as const, s })),
   ];
 
-  useEffect(() => {
+  // Retyping restarts the selection at the top. This is a direct consequence of
+  // the keystroke, so it belongs in the change handler — not an effect.
+  const search = (next: string) => {
+    setQ(next);
     setIdx(0);
-  }, [q]);
+  };
 
   const run = (i: number) => {
     const it = items[i];
@@ -83,7 +86,7 @@ export function CommandPalette({
           <input
             ref={inputRef}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => search(e.target.value)}
             onKeyDown={onKey}
             placeholder="Search chats or run a command…"
             className="flex-1 bg-transparent py-3.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none"

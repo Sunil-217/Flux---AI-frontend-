@@ -753,7 +753,7 @@ function UsersTab() {
     | { kind: 'ban' | 'demote' | 'delete' | 'block'; target: AdminUser }
     | null
   >(null);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstLoad = useRef(true);
 
   const load = useCallback((q: string) => {
     setLoading(true);
@@ -766,17 +766,14 @@ function UsersTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Debounced search-as-you-type — and the initial load, fired immediately.
+  // (Previously a separate mount effect fetched the same list, so opening the
+  // tab issued two requests.)
   useEffect(() => {
-    load('');
-  }, [load]);
-
-  // Debounced search-as-you-type.
-  useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => load(query.trim()), 300);
-    return () => {
-      if (debounce.current) clearTimeout(debounce.current);
-    };
+    const delay = firstLoad.current ? 0 : 300;
+    firstLoad.current = false;
+    const id = setTimeout(() => load(query.trim()), delay);
+    return () => clearTimeout(id);
   }, [query, load]);
 
   const applyPatch = async (
@@ -1064,7 +1061,7 @@ function AppCard({
 }) {
   const [docs, setDocs] = useState<AdminAppDocuments | null>(null);
   const [activity, setActivity] = useState<AdminAppActivity | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [detailsFailed, setDetailsFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<
     { kind: 'revoke' | 'delete' | 'doc'; docId?: number; filename?: string } | null
@@ -1073,18 +1070,29 @@ function AppCard({
   const actionBtn =
     'text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
+  // "Loading" is exactly "expanded, and the details haven't arrived or failed"
+  // — derived, so it can't drift out of sync with the request.
+  const loading = expanded && docs === null && !detailsFailed;
+
+  // Details are fetched the first time the row is expanded.
   useEffect(() => {
-    if (expanded && docs === null) {
-      setLoading(true);
-      Promise.all([adminAppDocuments(app.id), adminAppActivity(app.id)])
-        .then(([d, a]) => {
-          setDocs(d);
-          setActivity(a);
-        })
-        .catch((e) => toast.error(apiError(e, 'Could not load app details.')))
-        .finally(() => setLoading(false));
-    }
-  }, [expanded, app.id, docs]);
+    if (!expanded || docs !== null || detailsFailed) return;
+    let cancelled = false;
+    Promise.all([adminAppDocuments(app.id), adminAppActivity(app.id)])
+      .then(([d, a]) => {
+        if (cancelled) return;
+        setDocs(d);
+        setActivity(a);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setDetailsFailed(true);
+        toast.error(apiError(e, 'Could not load app details.'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, app.id, docs, detailsFailed]);
 
   const changePlan = async (newPlan: string) => {
     if (newPlan === app.plan) return;
@@ -1607,12 +1615,16 @@ function PlanEditorCard({
   const [highlighted, setHighlighted] = useState(plan.highlighted);
   const [active, setActive] = useState(plan.active);
 
-  // Re-sync the draft whenever the saved plan changes (after save / reorder reload).
-  useEffect(() => {
+  // Re-sync the draft whenever the saved plan changes (after save / reorder
+  // reload). Done during render, so the row never paints the stale draft for a
+  // frame after a save.
+  const [lastPlan, setLastPlan] = useState(plan);
+  if (lastPlan !== plan) {
+    setLastPlan(plan);
     setLabel(plan.label); setPrice(plan.price); setDocLimit(String(plan.doc_limit));
     setRateLimit(String(plan.rate_limit)); setBlurb(plan.blurb);
     setFeatures(plan.features); setHighlighted(plan.highlighted); setActive(plan.active);
-  }, [plan]);
+  }
 
   const cleanFeatures = features.map((f) => f.trim()).filter(Boolean);
   const dirty =
@@ -2258,8 +2270,9 @@ function BroadcastTab() {
     }
   }, [emailUsers, audience]);
 
+  // Mount-time load only — `loading` already starts true, and every later
+  // refetch goes through refresh(), which keeps the list on screen.
   const load = useCallback(() => {
-    setLoading(true);
     adminListBroadcasts()
       .then(setList)
       .catch((e) => toast.error(apiError(e, 'Could not load broadcasts.')))
@@ -2467,8 +2480,8 @@ function InvitesTab() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<AdminInvite | null>(null);
 
+  // Mount-time load only — see the note on BroadcastsTab.
   const load = useCallback(() => {
-    setLoading(true);
     adminListInvites()
       .then(setList)
       .catch((e) => toast.error(apiError(e, 'Could not load invites.')))
@@ -2618,8 +2631,8 @@ function WebhooksTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingEvents, setEditingEvents] = useState<string[]>([]);
 
+  // Mount-time load only — see the note on BroadcastsTab.
   const load = useCallback(() => {
-    setLoading(true);
     adminListWebhooks()
       .then(({ webhooks, events }) => { setHooks(webhooks); setEvents(events); })
       .catch((e) => toast.error(apiError(e, 'Could not load webhooks.')))

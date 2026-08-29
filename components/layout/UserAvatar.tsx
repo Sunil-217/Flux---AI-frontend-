@@ -44,8 +44,10 @@ export function UserAvatar({
 
   // Uploaded photo.
   if (avatar && avatar.startsWith('data:')) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
+      // A data: URI can't be optimised by next/image, and the avatar is tiny —
+      // a plain <img> is the right call here.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={avatar}
         alt={name ?? 'Profile photo'}

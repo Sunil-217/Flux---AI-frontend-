@@ -181,7 +181,9 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
   const [value, setValue] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
+  // getRecognizer() is SSR-safe (returns null without a window), so reading it
+  // as the initial value is safe and saves a render.
+  const [micSupported] = useState(() => getRecognizer() !== null);
   const [attachOpen, setAttachOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -190,10 +192,8 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
   const recognizerRef = useRef<SpeechRecognizer | null>(null);
   const baseRef = useRef('');
 
-  useEffect(() => {
-    setMicSupported(getRecognizer() !== null);
-    return () => recognizerRef.current?.abort?.();
-  }, []);
+  // Stop any in-flight dictation when the input unmounts.
+  useEffect(() => () => recognizerRef.current?.abort?.(), []);
 
   // The folder picker attribute isn't in React's typings — set it imperatively.
   useEffect(() => {
@@ -214,20 +214,24 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
     return () => document.removeEventListener('mousedown', onDoc);
   }, [attachOpen]);
 
-  // Insert text from outside (e.g. the prompt library) into the box.
-  useEffect(() => {
-    if (!injectText) return;
+  // Insert text from outside (e.g. the prompt library) into the box. `n` is a
+  // counter, so re-sending the same text still injects. Applying it during
+  // render puts the text in the box in the same pass instead of a second one.
+  const [injectedN, setInjectedN] = useState(0);
+  if (injectText && injectText.n !== injectedN) {
+    setInjectedN(injectText.n);
     setValue(injectText.text);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (el) {
-        el.focus();
-        el.style.height = 'auto';
-        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [injectText]);
+  }
+
+  // Focus and grow the textarea once the injected text has actually rendered.
+  useEffect(() => {
+    if (!injectedN) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [injectedN]);
 
   const canSend = !disabled && (value.trim().length > 0 || !!image);
 
@@ -367,7 +371,8 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
 
   const toggleMic = () => {
     if (disabled) return;
-    listening ? stopListening() : startListening();
+    if (listening) stopListening();
+    else startListening();
   };
 
   return (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 
@@ -42,12 +42,12 @@ export function PromptLibraryModal({
   onClose: () => void;
   onUse: (text: string) => void;
 }) {
-  const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
+  // Saved prompts live in localStorage; read them straight into the initial
+  // state (this modal only ever renders on the client).
+  const [prompts, setPrompts] = useState<SavedPrompt[]>(load);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  useEffect(() => setPrompts(load()), []);
 
   const reset = () => {
     setTitle('');

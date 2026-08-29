@@ -16,7 +16,7 @@ import {
   getChats,
 } from '@/services/api';
 import type { ChatSession } from '@/types';
-import { useT, getLang, setLang, type Lang } from '@/lib/i18n';
+import { useT, useLang, setLang, type Lang } from '@/lib/i18n';
 import { ConfirmModal } from '@/components/layout/Dialogs';
 import { Logo } from '@/components/layout/Logo';
 import { DeveloperConsole } from '@/components/layout/DeveloperConsole';
@@ -51,6 +51,25 @@ type Tab =
   | 'insights'
   | 'security'
   | 'about';
+
+/** Tabs that an admin can switch off, and the feature flag that gates each. */
+const TAB_FEATURE: Partial<Record<Tab, FeatureKey>> = {
+  api: 'api_keys',
+  personas: 'personas',
+  memory: 'memory',
+  insights: 'insights',
+};
+
+/** Chat has no single flag — it disappears only once all three are off. */
+function tabAllowed(tab: Tab, enabled: (key: FeatureKey) => boolean): boolean {
+  if (tab === 'chat') {
+    return (
+      enabled('response_style') || enabled('custom_instructions') || enabled('notifications')
+    );
+  }
+  const f = TAB_FEATURE[tab];
+  return !f || enabled(f);
+}
 
 const APP_VERSION = '1.0.0';
 const NOTIF_KEY = 'close_ai_notify_on_done';
@@ -307,8 +326,17 @@ const STARTER_PERSONAS: Persona[] = [
   },
 ];
 
+function readActivePersonaId(): string {
+  try {
+    return localStorage.getItem(ACTIVE_PERSONA_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 // Seed starters only on the very first load (key absent). An explicitly emptied
 // list ('[]') stays empty — deleting all personas must not resurrect them.
+// Seeding is idempotent, so it is safe as a lazy `useState` initializer.
 function loadPersonas(): Persona[] {
   try {
     const raw = localStorage.getItem(PERSONAS_KEY);
@@ -325,20 +353,11 @@ function loadPersonas(): Persona[] {
 
 /** Custom AI personalities — the active one shapes every chat reply. */
 function PersonasPanel() {
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [activeId, setActiveId] = useState('');
+  const [personas, setPersonas] = useState<Persona[]>(loadPersonas);
+  const [activeId, setActiveId] = useState(readActivePersonaId);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPersonas(loadPersonas());
-    try {
-      setActiveId(localStorage.getItem(ACTIVE_PERSONA_KEY) || '');
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const persist = (list: Persona[]) => {
     setPersonas(list);
@@ -848,33 +867,17 @@ export function SettingsModal({
     typeof window !== 'undefined' && localStorage.getItem(NOTIF_KEY) === 'on'
   );
   const t = useT();
-  const [lang, setLangState] = useState<Lang>('en');
-  useEffect(() => setLangState(getLang()), []);
+  // The language is shared app-wide, so read it from the store rather than
+  // mirroring it in local state.
+  const lang = useLang();
 
-  // If the open tab maps to a feature an admin just disabled, fall back to Account.
-  useEffect(() => {
-    const map: Partial<Record<Tab, FeatureKey>> = {
-      api: 'api_keys',
-      personas: 'personas',
-      memory: 'memory',
-      insights: 'insights',
-    };
-    if (
-      tab === 'chat' &&
-      !enabled('response_style') &&
-      !enabled('custom_instructions') &&
-      !enabled('notifications')
-    ) {
-      setTab('account');
-      return;
-    }
-    const f = map[tab];
-    if (f && !enabled(f)) setTab('account');
-  }, [tab, enabled]);
-  const pickLang = (l: Lang) => {
-    setLang(l);
-    setLangState(l);
-  };
+  // If the open tab maps to a feature an admin just disabled, fall back to
+  // Account. Doing this during render (instead of in an effect) means the
+  // disabled tab never paints. 'account' is always allowed, so this settles
+  // after one extra render pass.
+  if (!tabAllowed(tab, enabled)) setTab('account');
+
+  const pickLang = (l: Lang) => setLang(l);
 
   const profileChanged =
     name.trim() !== (user?.name ?? '') ||

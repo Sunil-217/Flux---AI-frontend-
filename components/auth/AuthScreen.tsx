@@ -288,9 +288,22 @@ function BrandPanel() {
   );
 }
 
+/** The invite token in the page URL, if this is an invite link. */
+function readInviteToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return new URLSearchParams(window.location.search).get('invite') || '';
+  } catch {
+    return '';
+  }
+}
+
 export function AuthScreen() {
   const { login } = useAuth();
-  const [mode, setMode] = useState<Mode>('signin');
+  // An invite link (/?invite=TOKEN) opens straight into the "accept invite"
+  // flow. Read once from the URL — this screen only renders on the client.
+  const [inviteToken] = useState(readInviteToken);
+  const [mode, setMode] = useState<Mode>(inviteToken ? 'invite' : 'signin');
   const [loading, setLoading] = useState(false);
 
   // ── 3D tilt: the card subtly follows the cursor (GPU transform only, rAF-
@@ -326,18 +339,13 @@ export function AuthScreen() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [inviteToken, setInviteToken] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
 
-  // If the page was opened from an invite link (/?invite=TOKEN), validate the
-  // token and switch to the "accept invite" flow with the email pre-filled.
+  // Validate the invite token and pre-fill the invited email. A bad or expired
+  // token drops back to sign-in and strips the query string.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const tok = new URLSearchParams(window.location.search).get('invite');
-    if (!tok) return;
-    setInviteToken(tok);
-    setMode('invite');
-    checkInvite(tok)
+    if (!inviteToken) return;
+    checkInvite(inviteToken)
       .then((r) => setInviteEmail(r.email))
       .catch((err) => {
         toast.error(apiError(err, 'This invite link is invalid or has expired.'));
@@ -348,7 +356,7 @@ export function AuthScreen() {
           /* ignore */
         }
       });
-  }, []);
+  }, [inviteToken]);
 
   const wrap = (fn: () => Promise<void>) => async (e: React.FormEvent) => {
     e.preventDefault();

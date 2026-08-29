@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { CodeSession, CodeChatMessage } from '@/types';
 
@@ -26,37 +26,38 @@ function newSession(): CodeSession {
   };
 }
 
+/** Saved code chats, or a fresh one when there are none. */
+function readSessions(): CodeSession[] {
+  try {
+    const raw = localStorage.getItem(CODE_SESSIONS_KEY);
+    const arr = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(arr) && arr.length) return arr as CodeSession[];
+  } catch {
+    /* ignore */
+  }
+  return [newSession()];
+}
+
+/** The code chat this tab was last on, if it still exists. */
+function readActiveId(sessions: CodeSession[]): string {
+  try {
+    const saved = sessionStorage.getItem(ACTIVE_CODE_KEY);
+    if (saved && sessions.some((s) => s.id === saved)) return saved;
+  } catch {
+    /* ignore */
+  }
+  return sessions[0].id;
+}
+
 export function useCodeSessions() {
-  const [sessions, setSessions] = useState<CodeSession[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const loaded = useRef(false);
+  // Read storage straight into the initial state: this hook only runs on the
+  // client, so there is nothing to hydrate against and no load flash to cover.
+  const [sessions, setSessions] = useState<CodeSession[]>(readSessions);
+  const [activeId, setActiveId] = useState<string | null>(() => readActiveId(sessions));
 
-  // Load once on mount.
+  // Persist on change. Writing the seed back on mount is intentional: it saves
+  // the freshly created chat when there was nothing stored.
   useEffect(() => {
-    let initial: CodeSession[] = [];
-    try {
-      const raw = localStorage.getItem(CODE_SESSIONS_KEY);
-      const arr = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(arr)) initial = arr as CodeSession[];
-    } catch {
-      /* ignore */
-    }
-    if (!initial.length) initial = [newSession()];
-    setSessions(initial);
-    let active = initial[0].id;
-    try {
-      const savedActive = sessionStorage.getItem(ACTIVE_CODE_KEY);
-      if (savedActive && initial.some((s) => s.id === savedActive)) active = savedActive;
-    } catch {
-      /* ignore */
-    }
-    setActiveId(active);
-    loaded.current = true;
-  }, []);
-
-  // Persist on change (after the initial load).
-  useEffect(() => {
-    if (!loaded.current) return;
     try {
       localStorage.setItem(CODE_SESSIONS_KEY, JSON.stringify(sessions.slice(0, 100)));
     } catch {
@@ -65,7 +66,7 @@ export function useCodeSessions() {
   }, [sessions]);
 
   useEffect(() => {
-    if (!loaded.current || !activeId) return;
+    if (!activeId) return;
     try {
       sessionStorage.setItem(ACTIVE_CODE_KEY, activeId);
     } catch {

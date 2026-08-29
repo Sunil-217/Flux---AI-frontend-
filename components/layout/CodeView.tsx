@@ -88,7 +88,9 @@ export function CodeView({
   onFolderOpened: (name: string) => void;
 }) {
   const theme = useAppTheme();
-  const [supported, setSupported] = useState(true);
+  // fsSupported() reads `window`, but Code mode is loaded with `ssr: false`, so
+  // this only ever runs in the browser.
+  const [supported] = useState(fsSupported);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [dir, setDir] = useState<any>(null);
   const [folderName, setFolderName] = useState('');
@@ -115,12 +117,15 @@ export function CodeView({
   const [messages, setMessages] = useState<ChatMsg[]>(sessionMessages);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const msgId = useRef(sessionMessages.reduce((mx, m) => Math.max(mx, m.id), 0) + 1);
+  const nextMsgId = sessionMessages.reduce((mx, m) => Math.max(mx, m.id), 0) + 1;
+  const msgId = useRef(nextMsgId);
   const chatEndRef = useRef<HTMLDivElement>(null);
   // Each code chat remembers its own folder handle (in-memory, this page load) so
   // switching chats restores that chat's workspace — like Claude Code per-project.
+  // Kept in state, not a ref, because the render pass that handles a chat switch
+  // reads it to restore that chat's folder.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dirHandlesRef = useRef<Map<string, any>>(new Map());
+  const [dirHandles, setDirHandles] = useState<Map<string, any>>(() => new Map());
 
   // Quick-open (Ctrl/Cmd+P) palette.
   const [quickOpen, setQuickOpen] = useState(false);
@@ -139,7 +144,6 @@ export function CodeView({
     onConfirm: () => void;
   } | null>(null);
 
-  useEffect(() => setSupported(fsSupported()), []);
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
@@ -147,9 +151,15 @@ export function CodeView({
   // Switching to a different code chat → load THAT chat's conversation and restore
   // (or clear) its own folder workspace. A new chat with no folder shows the
   // "Open folder" picker; an existing chat reopens the folder it was using.
-  useEffect(() => {
+  //
+  // The reset happens during render rather than in an effect, so the new chat
+  // never paints with the previous chat's tabs, diffs or search results.
+  const [lastSessionId, setLastSessionId] = useState(sessionId);
+  const [msgIdSeed, setMsgIdSeed] = useState(nextMsgId);
+  if (lastSessionId !== sessionId) {
+    setLastSessionId(sessionId);
     setMessages(sessionMessages);
-    msgId.current = sessionMessages.reduce((mx, m) => Math.max(mx, m.id), 0) + 1;
+    setMsgIdSeed(nextMsgId);
     // reset editor workspace for the switch
     setOpenTabs([]);
     setActiveTab(null);
@@ -161,18 +171,35 @@ export function CodeView({
     setSearchQuery('');
     setSearchHits([]);
     // restore this chat's folder if we still hold its handle (this page load)
-    const handle = dirHandlesRef.current.get(sessionId);
-    if (handle) {
-      setDir(handle);
-      setFolderName(handle.name || 'folder');
-      listCodeFiles(handle)
-        .then(setFiles)
-        .catch(() => setFiles([]));
-    } else {
-      setDir(null);
-      setFolderName('');
-      setFiles([]);
-    }
+    const handle = dirHandles.get(sessionId);
+    setDir(handle ?? null);
+    setFolderName(handle ? handle.name || 'folder' : '');
+    setFiles([]);
+  }
+
+  // Ids only have to be unique within a chat, so each switch restarts the
+  // counter just past the highest id already in that chat's transcript.
+  useEffect(() => {
+    msgId.current = msgIdSeed;
+  }, [lastSessionId, msgIdSeed]);
+
+  // Re-read the restored folder's file list. Cancelled on a further switch so a
+  // slow listing can't overwrite the chat you moved on to.
+  useEffect(() => {
+    const handle = dirHandles.get(sessionId);
+    if (!handle) return;
+    let cancelled = false;
+    listCodeFiles(handle)
+      .then((list) => {
+        if (!cancelled) setFiles(list);
+      })
+      .catch(() => {
+        if (!cancelled) setFiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Only a chat switch should re-list; opening a folder lists it directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -198,7 +225,8 @@ export function CodeView({
     setLoadingFolder(true);
     try {
       setDir(handle);
-      dirHandlesRef.current.set(sessionId, handle); // remember folder for THIS chat
+      // remember folder for THIS chat
+      setDirHandles((prev) => new Map(prev).set(sessionId, handle));
       const name = handle.name || 'folder';
       setFolderName(name);
       const list = await listCodeFiles(handle);
@@ -300,8 +328,9 @@ export function CodeView({
   };
 
   const acceptAll = async () => {
+    // Sequential on purpose: each accept writes a file through the same
+    // directory handle, and parallel writes race.
     for (const p of Object.keys(proposals)) {
-      // eslint-disable-next-line no-await-in-loop
       await acceptProposal(p);
     }
   };
@@ -531,8 +560,13 @@ export function CodeView({
   };
 
   // ── Keyboard: Ctrl/Cmd+S save, Ctrl/Cmd+P quick-open ──
+  // `save` closes over current state, so the listener reads it through a ref
+  // rather than re-subscribing on every render. The ref is updated in an effect
+  // (writing to it during render would make rendering impure).
   const saveRef = useRef(save);
-  saveRef.current = save;
+  useEffect(() => {
+    saveRef.current = save;
+  });
   useEffect(() => {
     if (!dir) return;
     const onKey = (e: KeyboardEvent) => {
