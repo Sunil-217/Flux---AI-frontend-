@@ -24,7 +24,7 @@ import {
   applyFont,
   applyTextSize,
 } from '@/components/layout/AccentPicker';
-import { SURFACES } from '@/lib/surfaces';
+import { SURFACES, SURFACE_VAR_NAMES } from '@/lib/surfaces';
 
 export const TEMPLATE_KEY = 'close_ai_template';
 export const SURFACE_KEY = 'close_ai_surface';
@@ -207,6 +207,34 @@ export function applyTemplate(key: string): AppTemplate | null {
     /* private mode / quota — the look still applied for this session */
   }
   return t;
+}
+
+/**
+ * Hand control of the surface back to globals.css.
+ *
+ * A template pins the palette as inline `!important` variables, which outrank
+ * the :root and .light blocks. So after a template is applied, flipping the
+ * light/dark class alone changes nothing on screen — the toggle looks broken.
+ * Callers that mean "use the normal theme now" clear the surface first.
+ *
+ * Accent variables are deliberately left in place: switching to light mode is
+ * not a request to give up your accent colour.
+ */
+export function clearSurface() {
+  if (typeof document !== 'undefined') {
+    const root = document.documentElement;
+    SURFACE_VAR_NAMES.forEach((v) => root.style.removeProperty(v));
+  }
+  try {
+    const stored = JSON.parse(localStorage.getItem(ACCENT_VARS_KEY) || 'null');
+    if (stored && typeof stored === 'object') {
+      SURFACE_VAR_NAMES.forEach((v) => delete stored[v]);
+      localStorage.setItem(ACCENT_VARS_KEY, JSON.stringify(stored));
+    }
+    localStorage.removeItem(SURFACE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** The saved template key, or '' when the user has customised by hand. */

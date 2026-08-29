@@ -124,3 +124,14 @@ export const SURFACES: Record<string, Surface> = {
 };
 
 export const SURFACE_KEYS = Object.keys(SURFACES);
+
+/**
+ * The variable names a surface owns. Derived from a real palette so it cannot
+ * drift out of step with what applyTemplate actually writes.
+ *
+ * Needed because a surface is applied as inline `!important` styles on <html>,
+ * which beat the :root / .light blocks in globals.css. Anything that hands
+ * control back to those blocks — the light/dark toggle, for instance — has to
+ * remove exactly these and nothing else, so the accent survives.
+ */
+export const SURFACE_VAR_NAMES: string[] = Object.keys(SURFACES.black.vars);

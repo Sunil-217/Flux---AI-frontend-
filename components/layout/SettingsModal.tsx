@@ -42,6 +42,7 @@ import {
   applyTemplate,
   currentTemplate,
   clearTemplateMark,
+  clearSurface,
   templateTheme,
 } from '@/lib/appTemplates';
 import { ttsSpeak } from '@/services/api';
@@ -1003,6 +1004,13 @@ export function SettingsModal({
     clearTemplateMark();
   }, []);
 
+  // Choosing light or dark by hand means "use the normal theme": the template's
+  // pinned surface has to be released or the class change does nothing.
+  const releaseTheme = useCallback(() => {
+    unmarkTemplate();
+    clearSurface();
+  }, [unmarkTemplate]);
+
   /**
    * Re-read the appearance settings after a template writes them.
    *
@@ -1469,7 +1477,7 @@ export function SettingsModal({
                       <button
                         key={t}
                         onClick={() => {
-                          unmarkTemplate();
+                          releaseTheme();
                           setHtmlTheme(t);
                           setTheme(t);
                         }}
