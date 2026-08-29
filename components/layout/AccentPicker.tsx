@@ -48,7 +48,14 @@ export function applyAccent(name: string) {
   // :root/.dark/.light no matter the cascade.
   Object.entries(a.vars).forEach(([k, v]) => root.style.setProperty(k, v, 'important'));
   try {
-    localStorage.setItem(ACCENT_VARS_KEY, JSON.stringify(a.vars));
+    // MERGE, don't replace. An app template stores its whole surface palette
+    // (background, panels, borders, text tiers) under this same key so the boot
+    // script can restore it before first paint. Overwriting with accent vars
+    // alone would silently drop the surface on the next reload — the look would
+    // survive the click and vanish on refresh.
+    const stored = JSON.parse(localStorage.getItem(ACCENT_VARS_KEY) || 'null');
+    const base = stored && typeof stored === 'object' ? stored : {};
+    localStorage.setItem(ACCENT_VARS_KEY, JSON.stringify({ ...base, ...a.vars }));
   } catch {
     /* ignore */
   }

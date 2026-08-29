@@ -42,6 +42,7 @@ import {
   applyTemplate,
   currentTemplate,
   clearTemplateMark,
+  templateTheme,
 } from '@/lib/appTemplates';
 import { ttsSpeak } from '@/services/api';
 import { useFeatures } from '@/components/providers/FeatureProvider';
@@ -259,7 +260,7 @@ function TemplatePicker({
                   )}
                 </span>
                 <span className="block text-[10px] text-[var(--ink-3)] mt-0.5 capitalize">
-                  {tpl.theme} · {tpl.density}
+                  {templateTheme(tpl)} · {tpl.density}
                 </span>
               </button>
             );

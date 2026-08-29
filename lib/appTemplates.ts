@@ -14,17 +14,20 @@
  */
 
 import {
+  ACCENTS,
   ACCENT_KEY,
+  ACCENT_VARS_KEY,
   CODE_FONT_KEY,
   FONT_KEY,
   TEXT_SIZE_KEY,
-  applyAccent,
   applyCodeFont,
   applyFont,
   applyTextSize,
 } from '@/components/layout/AccentPicker';
+import { SURFACES } from '@/lib/surfaces';
 
 export const TEMPLATE_KEY = 'close_ai_template';
+export const SURFACE_KEY = 'close_ai_surface';
 export const DENSITY_KEY = 'close_ai_density';
 export const THEME_KEY = 'theme';
 
@@ -33,13 +36,23 @@ export type AppTemplate = {
   label: string;
   /** One line on what this look is for — shown under the name in Settings. */
   description: string;
-  theme: 'light' | 'dark';
+  /**
+   * The surface palette: background, panels, borders and text tiers. This is
+   * what makes templates change the WHOLE app rather than just recolouring
+   * buttons — see lib/surfaces.
+   */
+  surface: string;
   accent: string;
   font: string;
   codeFont: string;
   textSize: 'small' | 'medium' | 'large';
   density: 'compact' | 'comfortable' | 'spacious';
 };
+
+/** Light or dark follows from the surface — they can never disagree. */
+export function templateTheme(t: AppTemplate): 'light' | 'dark' {
+  return SURFACES[t.surface]?.mode ?? 'dark';
+}
 
 /** Density is a class on <html> so CSS variables can react via .density-*. */
 export function applyDensity(d: string) {
@@ -60,73 +73,87 @@ export function applyTheme(t: string) {
 }
 
 export const APP_TEMPLATES: AppTemplate[] = [
-  // ── Everyday ───────────────────────────────────────────────────────────────
-  { key: 'default', label: 'Close AI Default', description: 'The original look — warm red on deep charcoal.', theme: 'dark', accent: 'red', font: 'default', codeFont: 'default', textSize: 'medium', density: 'comfortable' },
-  { key: 'daylight', label: 'Daylight', description: 'Clean light mode for bright rooms.', theme: 'light', accent: 'blue', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
-  { key: 'midnight', label: 'Midnight', description: 'Deep dark with a cool indigo accent.', theme: 'dark', accent: 'indigo', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
-  { key: 'paper', label: 'Paper', description: 'Light and serif — reads like a printed page.', theme: 'light', accent: 'graphite', font: 'serif', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
-  { key: 'graphite', label: 'Graphite', description: 'Neutral greys, nothing competing for attention.', theme: 'dark', accent: 'graphite', font: 'system', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
+  // ── Everyday ──────────────────────────────────────────────────
+  { key: 'default', label: 'Close AI Default', description: 'The original look - warm red on true black.', surface: 'black', accent: 'red', font: 'default', codeFont: 'default', textSize: 'medium', density: 'comfortable' },
+  { key: 'daylight', label: 'Daylight', description: 'Clean white light mode for bright rooms.', surface: 'snow', accent: 'blue', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
+  { key: 'midnight', label: 'Midnight', description: 'Deep navy with a cool indigo accent.', surface: 'navy', accent: 'indigo', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
+  { key: 'paper', label: 'Paper', description: 'Warm off-white and serif - reads like print.', surface: 'paper', accent: 'graphite', font: 'serif', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
+  { key: 'graphite', label: 'Graphite', description: 'Neutral charcoal, nothing competing for attention.', surface: 'charcoal', accent: 'graphite', font: 'system', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
+  { key: 'slate', label: 'Slate', description: 'Cool blue-grey surfaces, easy all day.', surface: 'slate', accent: 'sky', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
 
-  // ── Focus ──────────────────────────────────────────────────────────────────
-  { key: 'deep-focus', label: 'Deep Focus', description: 'Muted sage, generous spacing, nothing loud.', theme: 'dark', accent: 'sage', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'spacious' },
-  { key: 'minimal', label: 'Minimal', description: 'Slate on dark, compact — maximum content per screen.', theme: 'dark', accent: 'slate', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
-  { key: 'zen', label: 'Zen', description: 'Soft mint and airy spacing for long thinking sessions.', theme: 'light', accent: 'mint', font: 'inter', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
-  { key: 'quiet', label: 'Quiet', description: 'Low-contrast sage on light. Easy on tired eyes.', theme: 'light', accent: 'sage', font: 'serif', codeFont: 'consolas', textSize: 'medium', density: 'spacious' },
-  { key: 'monochrome', label: 'Monochrome', description: 'Grey everything. Colour only where it means something.', theme: 'dark', accent: 'slate', font: 'mono', codeFont: 'default', textSize: 'medium', density: 'compact' },
+  // ── Focus ─────────────────────────────────────────────────────
+  { key: 'deep-focus', label: 'Deep Focus', description: 'Forest surfaces, muted sage, generous spacing.', surface: 'forest', accent: 'sage', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'spacious' },
+  { key: 'minimal', label: 'Minimal', description: 'Black and slate, compact - maximum content per screen.', surface: 'black', accent: 'slate', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
+  { key: 'zen', label: 'Zen', description: 'Sage light with airy spacing for long sessions.', surface: 'sage', accent: 'mint', font: 'inter', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
+  { key: 'quiet', label: 'Quiet', description: 'Low-contrast linen. Easy on tired eyes.', surface: 'linen', accent: 'sage', font: 'serif', codeFont: 'consolas', textSize: 'medium', density: 'spacious' },
+  { key: 'monochrome', label: 'Monochrome', description: 'Grey everything. Colour only where it means something.', surface: 'charcoal', accent: 'slate', font: 'mono', codeFont: 'default', textSize: 'medium', density: 'compact' },
+  { key: 'solitude', label: 'Solitude', description: 'Midnight ink, nothing bright anywhere.', surface: 'ink', accent: 'graphite', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'spacious' },
 
-  // ── Developer ──────────────────────────────────────────────────────────────
-  { key: 'terminal', label: 'Terminal', description: 'Green on black, monospace throughout.', theme: 'dark', accent: 'green', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
-  { key: 'ide-dark', label: 'IDE Dark', description: 'Editor-like: blue accent, JetBrains code, tight rows.', theme: 'dark', accent: 'blue', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
-  { key: 'code-review', label: 'Code Review', description: 'Light, dense, monospaced — built for reading diffs.', theme: 'light', accent: 'iris', font: 'mono', codeFont: 'fira', textSize: 'small', density: 'compact' },
-  { key: 'hacker', label: 'Hacker', description: 'Lime on black. Unapologetically retro.', theme: 'dark', accent: 'lime', font: 'jetbrains', codeFont: 'cascadia', textSize: 'small', density: 'compact' },
-  { key: 'debug', label: 'Debug', description: 'Amber warning tones, compact, mono everywhere.', theme: 'dark', accent: 'amber', font: 'mono', codeFont: 'cascadia', textSize: 'small', density: 'compact' },
-  { key: 'notebook', label: 'Notebook', description: 'Light data-science look with a teal accent.', theme: 'light', accent: 'teal', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'comfortable' },
+  // ── Developer ─────────────────────────────────────────────────
+  { key: 'terminal', label: 'Terminal', description: 'Green on true black, monospace throughout.', surface: 'black', accent: 'green', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
+  { key: 'ide-dark', label: 'IDE Dark', description: 'Editor-like: slate surfaces, blue accent, tight rows.', surface: 'slate', accent: 'blue', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
+  { key: 'code-review', label: 'Code Review', description: 'Light, dense, monospaced - built for reading diffs.', surface: 'snow', accent: 'iris', font: 'mono', codeFont: 'fira', textSize: 'small', density: 'compact' },
+  { key: 'hacker', label: 'Hacker', description: 'Lime on black. Unapologetically retro.', surface: 'black', accent: 'lime', font: 'jetbrains', codeFont: 'cascadia', textSize: 'small', density: 'compact' },
+  { key: 'debug', label: 'Debug', description: 'Amber warning tones, compact, mono everywhere.', surface: 'charcoal', accent: 'amber', font: 'mono', codeFont: 'cascadia', textSize: 'small', density: 'compact' },
+  { key: 'notebook', label: 'Notebook', description: 'Light data-science look with a teal accent.', surface: 'mist', accent: 'teal', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'comfortable' },
+  { key: 'matrix', label: 'Matrix', description: 'Deep teal surfaces, emerald text accents.', surface: 'teal', accent: 'emerald', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
+  { key: 'dracula', label: 'Dracula', description: 'Plum surfaces with a violet glow.', surface: 'plum', accent: 'violet', font: 'jetbrains', codeFont: 'fira', textSize: 'small', density: 'compact' },
 
-  // ── Professional ───────────────────────────────────────────────────────────
-  { key: 'boardroom', label: 'Boardroom', description: 'Navy and serif. Formal without being stiff.', theme: 'light', accent: 'blue', font: 'playfair', codeFont: 'consolas', textSize: 'medium', density: 'comfortable' },
-  { key: 'consultant', label: 'Consultant', description: 'Ocean blue, crisp sans, tidy spacing.', theme: 'light', accent: 'ocean', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
-  { key: 'legal', label: 'Legal', description: 'Serif on light, spacious — for careful reading.', theme: 'light', accent: 'bronze', font: 'serif', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
-  { key: 'finance', label: 'Finance', description: 'Emerald on dark, dense tables, tabular feel.', theme: 'dark', accent: 'emerald', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
-  { key: 'executive', label: 'Executive', description: 'Graphite and Playfair. Understated authority.', theme: 'dark', accent: 'bronze', font: 'playfair', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
-  { key: 'agency', label: 'Agency', description: 'Space Grotesk with a violet accent. Studio energy.', theme: 'dark', accent: 'violet', font: 'space-grotesk', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
+  // ── Professional ──────────────────────────────────────────────
+  { key: 'boardroom', label: 'Boardroom', description: 'Navy and Playfair. Formal without being stiff.', surface: 'navy', accent: 'blue', font: 'playfair', codeFont: 'consolas', textSize: 'medium', density: 'comfortable' },
+  { key: 'consultant', label: 'Consultant', description: 'Cool mist, ocean blue, tidy spacing.', surface: 'mist', accent: 'ocean', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
+  { key: 'legal', label: 'Legal', description: 'Linen and serif, spacious - for careful reading.', surface: 'linen', accent: 'bronze', font: 'serif', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
+  { key: 'finance', label: 'Finance', description: 'Slate surfaces, emerald, dense tabular feel.', surface: 'slate', accent: 'emerald', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
+  { key: 'executive', label: 'Executive', description: 'Espresso and Playfair. Understated authority.', surface: 'espresso', accent: 'bronze', font: 'playfair', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  { key: 'agency', label: 'Agency', description: 'Plum surfaces, violet accent, studio energy.', surface: 'plum', accent: 'violet', font: 'space-grotesk', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
+  { key: 'clinical', label: 'Clinical', description: 'Snow-white and precise. Nothing decorative.', surface: 'snow', accent: 'cyan', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
+  { key: 'archive', label: 'Archive', description: 'Paper and slate, built for long documents.', surface: 'paper', accent: 'slate', font: 'serif', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
 
-  // ── Creative ───────────────────────────────────────────────────────────────
-  { key: 'sunset', label: 'Sunset', description: 'Orange into coral, warm and unhurried.', theme: 'dark', accent: 'orange', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'spacious' },
-  { key: 'sunrise', label: 'Sunrise', description: 'Amber on light. Morning-shift energy.', theme: 'light', accent: 'amber', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'comfortable' },
-  { key: 'neon', label: 'Neon', description: 'Fuchsia on black. Loud on purpose.', theme: 'dark', accent: 'fuchsia', font: 'space-grotesk', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
-  { key: 'synthwave', label: 'Synthwave', description: 'Magenta and mono. 1984 called.', theme: 'dark', accent: 'magenta', font: 'jetbrains', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
-  { key: 'bubblegum', label: 'Bubblegum', description: 'Pink on light, roomy and friendly.', theme: 'light', accent: 'pink', font: 'space-grotesk', codeFont: 'fira', textSize: 'large', density: 'spacious' },
-  { key: 'candy', label: 'Candy', description: 'Rose and playful, easy to read.', theme: 'light', accent: 'rose', font: 'inter', codeFont: 'fira', textSize: 'large', density: 'comfortable' },
-  { key: 'gallery', label: 'Gallery', description: 'Light, spacious, Playfair — content as exhibit.', theme: 'light', accent: 'plum', font: 'playfair', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
-  { key: 'studio', label: 'Studio', description: 'Iris on dark with a designer sans.', theme: 'dark', accent: 'iris', font: 'space-grotesk', codeFont: 'jetbrains', textSize: 'medium', density: 'spacious' },
+  // ── Creative ──────────────────────────────────────────────────
+  { key: 'sunset', label: 'Sunset', description: 'Espresso surfaces, orange into coral.', surface: 'espresso', accent: 'orange', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'spacious' },
+  { key: 'sunrise', label: 'Sunrise', description: 'Linen and amber. Morning-shift energy.', surface: 'linen', accent: 'amber', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'comfortable' },
+  { key: 'neon', label: 'Neon', description: 'Fuchsia on true black. Loud on purpose.', surface: 'black', accent: 'fuchsia', font: 'space-grotesk', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
+  { key: 'synthwave', label: 'Synthwave', description: 'Plum and magenta. Retro-future.', surface: 'plum', accent: 'magenta', font: 'jetbrains', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
+  { key: 'bubblegum', label: 'Bubblegum', description: 'Blush surfaces, pink accent, roomy.', surface: 'blush', accent: 'pink', font: 'space-grotesk', codeFont: 'fira', textSize: 'large', density: 'spacious' },
+  { key: 'candy', label: 'Candy', description: 'Blush and rose, easy to read.', surface: 'blush', accent: 'rose', font: 'inter', codeFont: 'fira', textSize: 'large', density: 'comfortable' },
+  { key: 'gallery', label: 'Gallery', description: 'Snow, spacious, Playfair - content as exhibit.', surface: 'snow', accent: 'plum', font: 'playfair', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
+  { key: 'studio', label: 'Studio', description: 'Charcoal with iris. Designer sans.', surface: 'charcoal', accent: 'iris', font: 'space-grotesk', codeFont: 'jetbrains', textSize: 'medium', density: 'spacious' },
+  { key: 'vaporwave', label: 'Vaporwave', description: 'Plum surfaces, cyan and pink energy.', surface: 'plum', accent: 'cyan', font: 'space-grotesk', codeFont: 'cascadia', textSize: 'medium', density: 'spacious' },
+  { key: 'noir', label: 'Noir', description: 'True black, crimson, serif. Film-still mood.', surface: 'black', accent: 'crimson', font: 'playfair', codeFont: 'consolas', textSize: 'medium', density: 'spacious' },
 
-  // ── Nature ─────────────────────────────────────────────────────────────────
-  { key: 'forest', label: 'Forest', description: 'Deep green on dark. Calm and grounded.', theme: 'dark', accent: 'green', font: 'serif', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
-  { key: 'ocean', label: 'Ocean', description: 'Cool teal depths.', theme: 'dark', accent: 'ocean', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
-  { key: 'sky', label: 'Sky', description: 'Light and open, pale blue accent.', theme: 'light', accent: 'sky', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
-  { key: 'desert', label: 'Desert', description: 'Bronze and warm neutrals.', theme: 'light', accent: 'bronze', font: 'serif', codeFont: 'consolas', textSize: 'medium', density: 'comfortable' },
-  { key: 'glacier', label: 'Glacier', description: 'Pale cyan on light. Cold and clear.', theme: 'light', accent: 'cyan', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'spacious' },
-  { key: 'volcano', label: 'Volcano', description: 'Crimson on near-black.', theme: 'dark', accent: 'crimson', font: 'space-grotesk', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
-  { key: 'meadow', label: 'Meadow', description: 'Lime and light, generous spacing.', theme: 'light', accent: 'lime', font: 'inter', codeFont: 'fira', textSize: 'large', density: 'spacious' },
-  { key: 'lavender', label: 'Lavender', description: 'Soft purple on light. Gentle contrast.', theme: 'light', accent: 'purple', font: 'serif', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  // ── Nature ────────────────────────────────────────────────────
+  { key: 'forest', label: 'Forest', description: 'Deep green surfaces. Calm and grounded.', surface: 'forest', accent: 'green', font: 'serif', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  { key: 'ocean', label: 'Ocean', description: 'Cool teal depths.', surface: 'teal', accent: 'ocean', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'comfortable' },
+  { key: 'sky', label: 'Sky', description: 'Cool mist and open sky blue.', surface: 'mist', accent: 'sky', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  { key: 'desert', label: 'Desert', description: 'Linen, bronze, warm neutrals.', surface: 'linen', accent: 'bronze', font: 'serif', codeFont: 'consolas', textSize: 'medium', density: 'comfortable' },
+  { key: 'glacier', label: 'Glacier', description: 'Snow and pale cyan. Cold and clear.', surface: 'snow', accent: 'cyan', font: 'inter', codeFont: 'sf-mono', textSize: 'medium', density: 'spacious' },
+  { key: 'volcano', label: 'Volcano', description: 'Ash-red surfaces on near-black.', surface: 'crimsonDark', accent: 'crimson', font: 'space-grotesk', codeFont: 'cascadia', textSize: 'medium', density: 'comfortable' },
+  { key: 'meadow', label: 'Meadow', description: 'Sage light with lime, generous spacing.', surface: 'sage', accent: 'lime', font: 'inter', codeFont: 'fira', textSize: 'large', density: 'spacious' },
+  { key: 'lavender', label: 'Lavender', description: 'Blush surfaces, soft purple.', surface: 'blush', accent: 'purple', font: 'serif', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  { key: 'moss', label: 'Moss', description: 'Forest surfaces, mint accents.', surface: 'forest', accent: 'mint', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'comfortable' },
+  { key: 'dusk', label: 'Dusk', description: 'Deep navy fading to violet.', surface: 'navy', accent: 'violet', font: 'inter', codeFont: 'jetbrains', textSize: 'medium', density: 'spacious' },
 
-  // ── Accessibility & comfort ────────────────────────────────────────────────
-  { key: 'large-print', label: 'Large Print', description: 'Bigger text and roomy lines throughout.', theme: 'light', accent: 'blue', font: 'system', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
-  { key: 'high-contrast', label: 'High Contrast', description: 'Maximum separation between text and background.', theme: 'dark', accent: 'yellow', font: 'system', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
-  { key: 'night-shift', label: 'Night Shift', description: 'Warm amber tones for late sessions.', theme: 'dark', accent: 'amber', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'comfortable' },
-  { key: 'low-light', label: 'Low Light', description: 'Dim coral on deep dark, nothing harsh.', theme: 'dark', accent: 'coral', font: 'serif', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
-  { key: 'readable', label: 'Readable', description: 'Serif, large, airy — built for long reading.', theme: 'light', accent: 'teal', font: 'serif', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
+  // ── Accessibility ─────────────────────────────────────────────
+  { key: 'large-print', label: 'Large Print', description: 'Bigger text and roomy lines throughout.', surface: 'snow', accent: 'blue', font: 'system', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
+  { key: 'high-contrast', label: 'High Contrast', description: 'Maximum separation between text and background.', surface: 'black', accent: 'yellow', font: 'system', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
+  { key: 'high-contrast-light', label: 'High Contrast Light', description: 'Pure white, dark text, strong borders.', surface: 'snow', accent: 'crimson', font: 'system', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
+  { key: 'night-shift', label: 'Night Shift', description: 'Warm espresso tones for late sessions.', surface: 'espresso', accent: 'amber', font: 'inter', codeFont: 'source-code', textSize: 'medium', density: 'comfortable' },
+  { key: 'low-light', label: 'Low Light', description: 'Dim coral on deep dark, nothing harsh.', surface: 'ink', accent: 'coral', font: 'serif', codeFont: 'consolas', textSize: 'large', density: 'spacious' },
+  { key: 'readable', label: 'Readable', description: 'Paper, serif, large, airy - long reading.', surface: 'paper', accent: 'teal', font: 'serif', codeFont: 'source-code', textSize: 'large', density: 'spacious' },
 
-  // ── Compact & power use ────────────────────────────────────────────────────
-  { key: 'dense', label: 'Dense', description: 'Everything tightened. More on screen, less scrolling.', theme: 'dark', accent: 'cyan', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
-  { key: 'cockpit', label: 'Cockpit', description: 'Compact dark with a sky accent. Dashboard feel.', theme: 'dark', accent: 'sky', font: 'inter', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
-  { key: 'triage', label: 'Triage', description: 'Compact light for working through a queue fast.', theme: 'light', accent: 'crimson', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
+  // ── Compact ───────────────────────────────────────────────────
+  { key: 'dense', label: 'Dense', description: 'Everything tightened. More on screen.', surface: 'charcoal', accent: 'cyan', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
+  { key: 'cockpit', label: 'Cockpit', description: 'Slate dashboard with a sky accent.', surface: 'slate', accent: 'sky', font: 'inter', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
+  { key: 'triage', label: 'Triage', description: 'Compact light for working a queue fast.', surface: 'snow', accent: 'crimson', font: 'system', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
+  { key: 'ledger', label: 'Ledger', description: 'Mist surfaces, dense rows, tabular.', surface: 'mist', accent: 'emerald', font: 'mono', codeFont: 'sf-mono', textSize: 'small', density: 'compact' },
 
-  // ── Character ──────────────────────────────────────────────────────────────
-  { key: 'royal', label: 'Royal', description: 'Deep plum and Playfair.', theme: 'dark', accent: 'plum', font: 'playfair', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
-  { key: 'vintage', label: 'Vintage', description: 'Bronze serif on light. Old paper, new app.', theme: 'light', accent: 'yellow', font: 'playfair', codeFont: 'consolas', textSize: 'medium', density: 'spacious' },
-  { key: 'arctic', label: 'Arctic', description: 'Icy cyan on dark.', theme: 'dark', accent: 'cyan', font: 'space-grotesk', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
-  { key: 'ember', label: 'Ember', description: 'Coral glow on charcoal.', theme: 'dark', accent: 'coral', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'comfortable' },
+  // ── Character ─────────────────────────────────────────────────
+  { key: 'royal', label: 'Royal', description: 'Deep plum and Playfair.', surface: 'plum', accent: 'plum', font: 'playfair', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
+  { key: 'vintage', label: 'Vintage', description: 'Linen, bronze serif. Old paper, new app.', surface: 'linen', accent: 'yellow', font: 'playfair', codeFont: 'consolas', textSize: 'medium', density: 'spacious' },
+  { key: 'arctic', label: 'Arctic', description: 'Icy cyan on deep teal.', surface: 'teal', accent: 'cyan', font: 'space-grotesk', codeFont: 'sf-mono', textSize: 'medium', density: 'comfortable' },
+  { key: 'ember', label: 'Ember', description: 'Coral glow on espresso.', surface: 'espresso', accent: 'coral', font: 'space-grotesk', codeFont: 'fira', textSize: 'medium', density: 'comfortable' },
+  { key: 'obsidian', label: 'Obsidian', description: 'True black with a graphite edge.', surface: 'black', accent: 'graphite', font: 'jetbrains', codeFont: 'jetbrains', textSize: 'small', density: 'compact' },
+  { key: 'porcelain', label: 'Porcelain', description: 'Snow and rose. Delicate and clean.', surface: 'snow', accent: 'rose', font: 'serif', codeFont: 'source-code', textSize: 'medium', density: 'spacious' },
 ];
 
 export const TEMPLATES_BY_KEY: Record<string, AppTemplate> = Object.fromEntries(
@@ -144,16 +171,33 @@ export function applyTemplate(key: string): AppTemplate | null {
   const t = TEMPLATES_BY_KEY[key];
   if (!t) return null;
 
-  applyTheme(t.theme);
-  applyAccent(t.accent);
+  const surface = SURFACES[t.surface];
+  const theme = templateTheme(t);
+  const accentVars = ACCENTS[t.accent]?.vars ?? {};
+  // Surface first, accent second: a template may share a surface with another
+  // and differ only in accent, and the accent must win where they overlap.
+  const vars = { ...(surface?.vars ?? {}), ...accentVars };
+
+  applyTheme(theme);
+  if (typeof document !== 'undefined') {
+    const root = document.documentElement;
+    // 'important' so inline vars beat the :root / .light blocks in globals.css.
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v, 'important'));
+  }
   applyFont(t.font);
   applyCodeFont(t.codeFont);
   applyTextSize(t.textSize);
   applyDensity(t.density);
 
   try {
+    // The whole palette goes in ACCENT_VARS_KEY because the pre-paint boot
+    // script in app/layout.tsx already restores every `--var` it finds there.
+    // Storing surfaces here means a template survives reload with no flash and
+    // no change to the boot script.
+    localStorage.setItem(ACCENT_VARS_KEY, JSON.stringify(vars));
     localStorage.setItem(TEMPLATE_KEY, t.key);
-    localStorage.setItem(THEME_KEY, t.theme);
+    localStorage.setItem(SURFACE_KEY, t.surface);
+    localStorage.setItem(THEME_KEY, theme);
     localStorage.setItem(ACCENT_KEY, t.accent);
     localStorage.setItem(FONT_KEY, t.font);
     localStorage.setItem(CODE_FONT_KEY, t.codeFont);
