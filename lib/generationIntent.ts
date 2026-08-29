@@ -35,25 +35,91 @@ const POLITE_PREFIX =
  *
  * Note "show" is deliberately absent while "tell" is present: "tell me about
  * X" asks for an explanation, "show me X" asks to be shown the thing.
+ *
+ * Users write to this app in romanised Tamil, Telugu and Hindi as often as in
+ * English, and every one of those languages draws the same show/tell line —
+ * kaatu vs sollu, chupinchu vs cheppu, dikhao vs batao. The "tell" side of each
+ * pair belongs here; the "show" side belongs in GENERATION_VERB. Getting that
+ * split right is what keeps "image generation pathi sollu" a question while
+ * "Vijay image kaatu" generates a picture.
  */
-const INFORMATIONAL_LEAD =
-  /^(what|how|why|when|where|which|whose|whom|is|are|am|was|were|do|does|did|explain|define|describe|difference|compare|tell|list|name|meaning)\b/i;
+const INFORMATIONAL_LEAD = new RegExp(
+  '^(' +
+    // English
+    'what|how|why|when|where|which|whose|whom|is|are|am|was|were|do|does|did|' +
+    'explain|define|describe|difference|compare|tell|list|name|meaning|' +
+    // Tamil
+    'enna|enn|epdi|eppadi|eppdi|yen|edhu|ethu|yaaru|yaru|sollu|solunga|sollunga|vilakku|artham|' +
+    // Telugu
+    'enti|emiti|ela|enduku|evaru|cheppu|cheppandi|vivarinchu|artham|' +
+    // Hindi
+    'kya|kaise|kyun|kyu|kaun|kaunsa|batao|bataiye|samjhao|matlab' +
+    ')\\b',
+  'i'
+);
 
 /**
  * Informational phrasing that can appear anywhere, not just at the start —
  * "show me how image generation works" leads with "show" but is still a
- * question about a concept.
+ * question about a concept, and "image generation na enna" puts its question
+ * word last, which is ordinary word order in all three languages.
  */
-const INFORMATIONAL_PHRASE =
-  /\b(?:how\b[\s\S]{0,40}\bworks?\b|how\s+to\b|what(?:'s| is| are)\b|explain\b|meaning\s+of\b|definition\s+of\b|tell\s+me\s+about\b|difference\s+between\b)/i;
+const INFORMATIONAL_PHRASE = new RegExp(
+  '(?:' +
+    // English
+    '\\bhow\\b[\\s\\S]{0,40}\\bworks?\\b|\\bhow\\s+to\\b|\\bwhat(?:\'s| is| are)\\b|' +
+    '\\bexplain\\b|\\bmeaning\\s+of\\b|\\bdefinition\\s+of\\b|\\btell\\s+me\\s+about\\b|' +
+    '\\bdifference\\s+between\\b|' +
+    // Tamil: trailing question word, "pathi sollu" (tell me about), "nu enna"
+    '\\b(?:na|nu|nnu)\\s+(?:enna|ennanu)\\b|\\benna\\s*\\?*$|\\bepp?adi\\b|\\bpathi\\b|\\bpatri\\b|' +
+    '\\bvilakku\\b|\\bsollu\\b|\\bsolunga\\b|' +
+    // Telugu: "ante enti" (what is), "gurinchi cheppu" (tell me about)
+    '\\bante\\s+enti\\b|\\benti\\s*\\?*$|\\bgurinchi\\b|\\bcheppu\\b|\\bvivarinchu\\b|' +
+    // Hindi: "kya hai" (what is), "ke baare mein batao" (tell me about)
+    '\\bkya\\s+hai\\b|\\bkya\\s*\\?*$|\\bbaare\\s+mein\\b|\\bbatao\\b|\\bsamjhao\\b' +
+    ')',
+  'i'
+);
 
-/** Verbs that ask for something to be produced. */
-const GENERATION_VERB =
-  /\b(draw|sketch|illustrate|paint|make|create|generate|render|produce|design|show|give|want|need|build|draft|prepare|convert|turn|export|save|download|venum|vendum|kudu|kodu)\b/i;
+/**
+ * Verbs that ask for something to be produced — including the "show / make /
+ * give / want" verbs of the romanised languages users actually type in.
+ */
+const GENERATION_VERB = new RegExp(
+  '\\b(' +
+    // English
+    'draw|sketch|illustrate|paint|make|create|generate|render|produce|design|show|' +
+    'give|want|need|build|draft|prepare|convert|turn|export|save|download|' +
+    // Tamil: kaatu = show, podu = put/make, varai = draw, venum = want, kudu = give
+    'kaatu|kaattu|kattu|kaatunga|kaaminga|podu|podunga|pottu|varai|varaiyu|' +
+    'venum|vendum|vanum|kudu|kodu|kudunga|anuppu|' +
+    // Telugu: chupinchu = show, kavali = want, cheyyi = do/make, teeyi = take
+    'chupinchu|chupinchandi|chupu|kavali|kaavali|cheyyi|cheyandi|teeyi|' +
+    // Hindi: dikhao = show, banao = make, chahiye = want, bhejo = send
+    'dikhao|dikhaiye|dikha|banao|banaiye|bana|chahiye|chaahiye|bhejo' +
+    ')\\b',
+  'i'
+);
 
-/** Nouns naming a visual artefact. */
-const IMAGE_NOUN =
-  /\b(image|picture|photo|photograph|drawing|illustration|art|artwork|painting|sketch|pic|wallpaper|poster)\b/i;
+/**
+ * Nouns naming a visual artefact, in the languages users write in.
+ * Tamil padam also means "movie"; paired with a request verb the reading is
+ * unambiguous, and a bare noun never triggers generation on its own.
+ */
+const IMAGE_NOUN = new RegExp(
+  '\\b(' +
+    // English
+    'image|picture|photo|photograph|drawing|illustration|art|artwork|painting|' +
+    'sketch|pic|wallpaper|poster|' +
+    // Tamil
+    'padam|padham|padangal|chithiram|chithram|' +
+    // Telugu
+    'chitram|chitralu|bomma|bommalu|foto|' +
+    // Hindi
+    'tasveer|tasvir|chitra|photu' +
+    ')\\b',
+  'i'
+);
 
 /** Looks like a programming request, where "image" or "table" mean something else. */
 const CODE_HINT =
@@ -102,7 +168,14 @@ export function extractTopic(text: string): string {
     .replace(/\b(into|onto|to|as|has|in|now|just|also|then|and|please)\b/gi, ' ')
     .replace(/\b(pdf|document|doc|report|brief|paper|file|format|version|image|picture|photo|photograph|pic|drawing|illustration|art|artwork|painting|sketch|wallpaper|poster)\b/gi, ' ')
     .replace(/\b(excel|spreadsheet|xlsx|workbook|sheet|word|docx|ppt|pptx|powerpoint|presentation|slides?|deck|content|data|info|information|table)\b/gi, ' ')
-    .replace(/\b(ha|aa|da|na|naku|enaku|yenaku|venum|vendum|kudu|kodu|pannu|panni)\b/gi, ' ')
+    // Regional media nouns — the same list IMAGE_NOUN matches, so the subject
+    // doesn't come out as "Vijay padam".
+    .replace(/\b(padam|padham|padangal|chithiram|chithram|chitram|chitralu|bomma|bommalu|foto|tasveer|tasvir|chitra|photu)\b/gi, ' ')
+    // Regional request verbs and pronouns/particles — framing, not subject.
+    .replace(/\b(kaatu|kaattu|kattu|kaatunga|kaaminga|podu|podunga|pottu|varai|varaiyu|anuppu|kudunga)\b/gi, ' ')
+    .replace(/\b(chupinchu|chupinchandi|chupu|kavali|kaavali|cheyyi|cheyandi|teeyi)\b/gi, ' ')
+    .replace(/\b(dikhao|dikhaiye|dikha|banao|banaiye|bana|chahiye|chaahiye|bhejo|mujhe|mujhko|ek|ki|ka|ke)\b/gi, ' ')
+    .replace(/\b(ha|aa|da|na|nu|nnu|naku|enaku|yenaku|enakku|naaku|oru|oka|venum|vendum|vanum|kudu|kodu|pannu|panni|pls)\b/gi, ' ')
     .replace(/\b(about|on|for|of|regarding|concerning|covering|titled|called|explaining)\b/gi, ' ')
     .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
     .replace(/\s+/g, ' ')
