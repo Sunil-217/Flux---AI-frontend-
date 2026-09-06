@@ -100,6 +100,7 @@ export function AppLayout() {
 
   const {
     sessions,
+    flushSave,
     activeSession,
     activeSessionId,
     setActiveSessionId,
@@ -155,7 +156,8 @@ export function AppLayout() {
       if (activeSessionId) {
         addUploadedFile(activeSessionId, filename);
       }
-    }
+    },
+    flushSave
   );
 
   const uploadedFile = activeSession?.uploadedFile ?? null;
@@ -709,7 +711,19 @@ export function AppLayout() {
 
       const sid = activeSessionId;
       const isFirst = (activeSession?.messages.length ?? 0) === 0;
-      sendMessage(content, buildHistory(), image);
+      if (isFirst) {
+        // The server checks chat ownership against this user's saved blob, so
+        // the very first message in a brand-new chat 404s until that chat has
+        // been persisted. Waiting for one save is cheaper than the alternative:
+        // "Chat not found" on the first thing a user ever types.
+        flushSave()
+          .catch(() => {
+            /* the send below will surface anything that is actually wrong */
+          })
+          .finally(() => sendMessage(content, buildHistory(), image));
+      } else {
+        sendMessage(content, buildHistory(), image);
+      }
       // On the very first message, ask the backend for a smart title.
       if (isFirst && sid && content.trim()) {
         generateTitle(content.trim())
@@ -719,7 +733,7 @@ export function AppLayout() {
           .catch(() => {});
       }
     },
-    [sendMessage, buildHistory, activeSessionId, activeSession, updateSession, handleSlashGenerate, handleResearch, handleQuiz, lastAssistantContent]
+    [sendMessage, buildHistory, activeSessionId, activeSession, updateSession, handleSlashGenerate, handleResearch, handleQuiz, lastAssistantContent, flushSave]
   );
 
   // Edit: update the user bubble, trim subsequent messages, re-ask the AI

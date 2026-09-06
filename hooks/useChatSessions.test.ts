@@ -116,3 +116,68 @@ describe('useChatSessions', () => {
     expect(result.current.activeSessionId).toBeNull();
   });
 });
+
+// ── flushSave ────────────────────────────────────────────────────────────────
+// Reported as "file upload doesn't work". Measured against production: the
+// active chat existed only in the browser, and /upload answered 404 "Chat not
+// found" — as did /chat. Chat IDs are generated client-side and the server
+// checks ownership against this user's saved blob, so anything server-side that
+// names a chat has to wait for that blob to contain it.
+
+describe('flushSave', () => {
+  it('persists immediately instead of waiting for the debounce', async () => {
+    const { saveChats } = await import('@/services/api');
+    vi.mocked(saveChats).mockClear();
+    const { result } = await mount();
+
+    let id = '';
+    act(() => {
+      id = result.current.createSession();
+    });
+    // Nothing has been sent yet — the background save is still on its timer.
+    vi.mocked(saveChats).mockClear();
+
+    await act(async () => {
+      await result.current.flushSave();
+    });
+
+    expect(saveChats).toHaveBeenCalledTimes(1);
+    const sent = vi.mocked(saveChats).mock.calls[0][0];
+    expect(sent.some((s) => s.id === id)).toBe(true);
+  });
+
+  it('sends the newest sessions, not a stale closure', async () => {
+    const { saveChats } = await import('@/services/api');
+    const { result } = await mount();
+
+    let first = '';
+    act(() => {
+      first = result.current.createSession();
+    });
+    let second = '';
+    act(() => {
+      second = result.current.createSession();
+    });
+    act(() => {
+      result.current.addMessage(second, userMsg('m1', 'hello'));
+    });
+
+    vi.mocked(saveChats).mockClear();
+    await act(async () => {
+      await result.current.flushSave();
+    });
+
+    const sent = vi.mocked(saveChats).mock.calls[0][0];
+    expect(sent.some((s) => s.id === first)).toBe(true);
+    const target = sent.find((s) => s.id === second);
+    expect(target?.messages).toHaveLength(1);
+  });
+
+  it('rejects when the save fails, so callers can react', async () => {
+    // Silently swallowing this is what made the failure look random.
+    const { saveChats } = await import('@/services/api');
+    const { result } = await mount();
+    vi.mocked(saveChats).mockRejectedValueOnce(new Error('network down'));
+    await expect(result.current.flushSave()).rejects.toThrow('network down');
+  });
+});

@@ -9,7 +9,16 @@ const ALLOWED_FILE = /\.(pdf|docx|xlsx|pptx|txt|md|csv|json|py|js|ts|tsx|jsx|htm
 
 export function useFileUpload(
   sessionId: string | null,
-  onSuccess?: (filename: string) => void
+  onSuccess?: (filename: string) => void,
+  /**
+   * Make sure the chat exists on the server before uploading into it.
+   *
+   * Chat IDs are generated in the browser and the server checks ownership
+   * against this user's saved blob, so a chat that has not been persisted yet
+   * answers 404 "Chat not found" — which is what a fresh chat does until the
+   * background save happens to have fired.
+   */
+  ensureSaved?: () => Promise<void>
 ) {
   const [isUploading, setIsUploading] = useState(false);
 
@@ -25,6 +34,7 @@ export function useFileUpload(
       const toastId = toast.loading(`Uploading ${file.name}…`);
 
       try {
+        await ensureSaved?.();
         const filename = await uploadFileApi(file, sessionId);
         toast.success('File uploaded — ask anything about it', { id: toastId });
         onSuccess?.(filename);
@@ -34,7 +44,7 @@ export function useFileUpload(
         setIsUploading(false);
       }
     },
-    [sessionId, isUploading, onSuccess]
+    [sessionId, isUploading, onSuccess, ensureSaved]
   );
 
   // Upload several files sequentially (folder / multi-select) with one toast.
@@ -48,6 +58,11 @@ export function useFileUpload(
       }
       setIsUploading(true);
       const toastId = toast.loading(`Uploading ${valid.length} file${valid.length > 1 ? 's' : ''}…`);
+      try {
+        await ensureSaved?.();
+      } catch {
+        /* the upload below will surface the real problem */
+      }
       let ok = 0;
       let lastErr: unknown = null;
       for (const file of valid) {
@@ -66,7 +81,7 @@ export function useFileUpload(
       else toast.error(apiError(lastErr, 'Could not upload those files.'), { id: toastId });
       setIsUploading(false);
     },
-    [sessionId, isUploading, onSuccess]
+    [sessionId, isUploading, onSuccess, ensureSaved]
   );
 
   return { isUploading, upload, uploadMany };

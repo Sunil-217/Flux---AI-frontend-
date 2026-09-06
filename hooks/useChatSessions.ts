@@ -103,18 +103,47 @@ export function useChatSessions() {
 
   // Persist to the server whenever sessions change (debounced — handles streaming).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest sessions, readable from flushSave without making it change identity
+  // on every keystroke. Written in an effect, not during render — flushSave is
+  // only ever called from an event handler, by which time effects have run.
+  const sessionsRef = useRef(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
   useEffect(() => {
     if (!loaded) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveChats(sessions).catch(() => {
-        /* best-effort */
+        /* best-effort — flushSave covers the cases that must not be */
       });
     }, 600);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [sessions, loaded]);
+
+  /**
+   * Save now and wait for it.
+   *
+   * Chat IDs are generated in the browser, and the server decides ownership by
+   * looking for the ID in this user's saved blob. Until that blob contains the
+   * chat, every per-chat endpoint answers 404 "Chat not found" — so uploading a
+   * file or sending the first message in a freshly created chat depended on a
+   * 600ms debounce having already fired, with its failure swallowed. It worked
+   * most of the time, which is what made it look random.
+   *
+   * Callers that are about to ask the server to do something with a chat await
+   * this first.
+   */
+  const flushSave = useCallback(async () => {
+    if (!loaded) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    await saveChats(sessionsRef.current);
+  }, [loaded]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
 
@@ -344,6 +373,7 @@ export function useChatSessions() {
 
   return {
     sessions,
+    flushSave,
     activeSession,
     activeSessionId,
     setActiveSessionId,
