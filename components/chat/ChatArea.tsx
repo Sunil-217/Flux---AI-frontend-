@@ -43,6 +43,8 @@ function readSelectedDocs(sessionId: string | undefined, uploadedFiles: string[]
 interface Props {
   session: ChatSession | null;
   isLoading: boolean;
+  /** Current stage on the autonomous agent path; '' on the ordinary path. */
+  status?: string;
   isUploading: boolean;
   uploadedFile: string | null;
   uploadedFiles: string[];
@@ -73,6 +75,7 @@ interface Props {
 export function ChatArea({
   session,
   isLoading,
+  status,
   isUploading,
   uploadedFile,
   uploadedFiles,
@@ -574,7 +577,7 @@ export function ChatArea({
                 }
               />
             ))}
-            {awaitingReply && <TypingIndicator />}
+            {awaitingReply && <TypingIndicator label={status} />}
             {!isLoading && followups.length > 0 && lastMessage?.role === 'assistant' && (
               <div className="flex flex-wrap gap-2 pt-1">
                 {followups.map((q) => (

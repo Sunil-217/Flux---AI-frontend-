@@ -138,7 +138,7 @@ export function AppLayout() {
     setCodeSessionFolder,
   } = useCodeSessions();
 
-  const { isLoading, sendMessage, resendQuestion, regenerateVariant, stop } = useChat(
+  const { isLoading, status, sendMessage, resendQuestion, regenerateVariant, stop } = useChat(
     activeSessionId,
     {
       addMessage,
@@ -995,6 +995,7 @@ export function AppLayout() {
         <ChatArea
           session={activeSession}
           isLoading={isLoading}
+          status={status}
           isUploading={isUploading}
           uploadedFile={uploadedFile}
           uploadedFiles={uploadedFiles}

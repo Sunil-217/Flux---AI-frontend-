@@ -108,3 +108,95 @@ describe('streamQuestion', () => {
     expect(body.history).toEqual([{ role: 'user', content: 'prev' }]);
   });
 });
+
+// ── Autonomous agent path (POST /agent/task) ──
+// The extra events are additive: /chat never sends them, so an ordinary chat
+// stream must behave exactly as it did before these handlers existed.
+describe('streamQuestion — agent events', () => {
+  it('reports high-level stage labels via onStatus', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'data: {"type":"status","stage":"planning","label":"Planning"}\n\n',
+          'data: {"type":"status","stage":"research","label":"Researching"}\n\n',
+          'data: {"type":"token","content":"answer"}\n\n',
+          'data: {"type":"done"}\n\n',
+        ])
+      )
+    );
+    const stages: string[] = [];
+    const tokens: string[] = [];
+    await streamQuestion('c1', 'q', [], {
+      onToken: (t) => tokens.push(t),
+      onStatus: (label) => stages.push(label),
+    });
+    expect(stages).toEqual(['Planning', 'Researching']);
+    expect(tokens).toEqual(['answer']);
+  });
+
+  it('delivers a generated image via onImage', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'data: {"type":"image","image":"data:image/png;base64,AAAA"}\n\n',
+          'data: {"type":"done"}\n\n',
+        ])
+      )
+    );
+    let image = '';
+    await streamQuestion('c1', 'draw a picture of a cat', [], {
+      onToken: () => {},
+      onImage: (d) => {
+        image = d;
+      },
+    });
+    expect(image).toBe('data:image/png;base64,AAAA');
+  });
+
+  it('ignores the internal task-state event rather than rendering it', async () => {
+    // `task` carries the full plan and step statuses. Surfacing it would be the
+    // chain-of-thought leak the fixed status vocabulary exists to avoid.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'data: {"type":"task","task":{"plan":[{"id":1,"agent":"research"}]}}\n\n',
+          'data: {"type":"token","content":"final"}\n\n',
+        ])
+      )
+    );
+    const tokens: string[] = [];
+    await streamQuestion('c1', 'q', [], { onToken: (t) => tokens.push(t) });
+    expect(tokens).toEqual(['final']);
+  });
+
+  it('posts to /chat when the agent path is disabled', async () => {
+    // Default configuration: nothing about the request path changes.
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse(['data: {"type":"done"}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamQuestion('c1', 'hi', [], { onToken: () => {} });
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/chat$/);
+  });
+
+  it('survives a status event with no label', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'data: {"type":"status"}\n\n',
+          'data: {"type":"token","content":"ok"}\n\n',
+        ])
+      )
+    );
+    const stages: string[] = [];
+    const tokens: string[] = [];
+    await streamQuestion('c1', 'q', [], {
+      onToken: (t) => tokens.push(t),
+      onStatus: (l) => stages.push(l),
+    });
+    expect(stages).toEqual([]);
+    expect(tokens).toEqual(['ok']);
+  });
+});
