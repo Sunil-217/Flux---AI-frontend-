@@ -84,7 +84,7 @@ const SHELL_FRAG = /* glsl */ `
 `;
 
 const POINT_VERT = /* glsl */ `
-  uniform float uTime; uniform float uSpread; uniform float uSize; uniform float uMotion;
+  uniform float uTime; uniform float uSpread; uniform float uSize; uniform float uMotion; uniform float uPixel;
   attribute float aSeed;
   varying float vFade;
   void main() {
@@ -93,7 +93,10 @@ const POINT_VERT = /* glsl */ `
     p += vec3(sin(t + aSeed * 6.28), cos(t * 1.3 + aSeed * 3.14), sin(t * 0.8)) * 0.06;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     vFade = clamp(1.0 - (-mv.z - 2.0) / 6.0, 0.15, 1.0);
-    gl_PointSize = uSize * (0.6 + aSeed * 0.9) * (300.0 / max(-mv.z, 0.001));
+    // uPixel is derived from the drawing buffer, so a point is a few device
+    // pixels at any core size: the old constant made every particle ~40 CSS px
+    // and the whole object collapsed into a blurred cloud.
+    gl_PointSize = max(1.0, uSize * (0.6 + aSeed * 0.9) * (uPixel / max(-mv.z, 0.001)));
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -107,8 +110,8 @@ const POINT_FRAG = /* glsl */ `
     if (r > 0.25) discard;
     // Dark: a soft additive mote, the haze IS the effect. Light: a small crisp
     // dot with normal blending — soft motes overlap into a solid disc on paper.
-    float edge = mix(0.16, 0.25, uDark);
-    float a = smoothstep(edge, edge * mix(0.35, 0.0, uDark), r) * vFade * mix(0.95, 0.55, uDark);
+    float edge = mix(0.16, 0.22, uDark);
+    float a = smoothstep(edge, edge * 0.2, r) * vFade * mix(0.95, 0.8, uDark);
     gl_FragColor = vec4(mix(uColor, uColor * a, uDark), a);
   }
 `;
@@ -219,12 +222,12 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
 
   /* Shared uniforms */
   const shellU = { uTime: { value: 0 }, uPulse: { value: TUNING.idle.pulse }, uEnergy: { value: TUNING.idle.energy }, uColor: { value: base.clone() }, uDark: { value: uDark } };
-  const pointU = { uTime: { value: 0 }, uSpread: { value: 1 }, uSize: { value: 1.7 }, uColor: { value: base.clone() }, uDark: { value: uDark }, uMotion: { value: motionScale } };
+  const pointU = { uTime: { value: 0 }, uSpread: { value: 1 }, uSize: { value: 1.7 }, uColor: { value: base.clone() }, uDark: { value: uDark }, uMotion: { value: motionScale }, uPixel: { value: 14 } };
 
   const shellMat = track(new THREE.ShaderMaterial({ uniforms: shellU, vertexShader: SHELL_VERT, fragmentShader: SHELL_FRAG, transparent: true, blending, depthWrite: false, side: THREE.DoubleSide }));
   const pointMat = track(new THREE.ShaderMaterial({ uniforms: pointU, vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, transparent: true, blending, depthWrite: false }));
-  const lineMat = track(new THREE.LineBasicMaterial({ color: base.clone(), transparent: true, opacity: dark ? 0.14 : 0.2, depthWrite: false, blending }));
-  const wireMat = track(new THREE.MeshBasicMaterial({ color: base.clone(), wireframe: true, transparent: true, opacity: dark ? 0.10 : 0.14, depthWrite: false }));
+  const lineMat = track(new THREE.LineBasicMaterial({ color: base.clone(), transparent: true, opacity: dark ? 0.22 : 0.24, depthWrite: false, blending }));
+  const wireMat = track(new THREE.MeshBasicMaterial({ color: base.clone(), wireframe: true, transparent: true, opacity: dark ? 0.16 : 0.17, depthWrite: false }));
 
   const colourTargets: THREE.Color[] = [shellU.uColor.value, pointU.uColor.value, lineMat.color, wireMat.color];
 
@@ -240,7 +243,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     for (let i = 0; i < n; i++) seeds[i] = Math.random();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
-    pointU.uSize.value = size * (dark ? 1 : 0.2);
+    pointU.uSize.value = size * (dark ? 1 : 0.72);
     pointU.uSpread.value = spread;
     const pts = new THREE.Points(geo, pointMat);
     group.add(pts);
@@ -284,7 +287,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       ring(1.35, 0.012, Math.PI / 2.6, 0.2, 0.30);
       ring(1.70, 0.010, Math.PI / 4.0, 1.3, -0.22, 'x');
       ring(2.05, 0.008, Math.PI / 1.7, 2.4, 0.16, 'y');
-      addPoints(fibonacciSphere(Math.floor(particleCount * 0.35), 2.3), 1.4);
+      addPoints(fibonacciSphere(Math.floor(particleCount * 0.55), 2.3), 1.4);
       break;
     }
     case 'lattice': {
@@ -331,7 +334,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       inner.rotation.set(0.4, 0.8, 0.2);
       group.add(inner);
       orbiters.push({ obj: inner, axis: 'y', rate: -0.35 });
-      addPoints(fibonacciSphere(Math.floor(particleCount * 0.4), 2.35), 1.3);
+      addPoints(fibonacciSphere(Math.floor(particleCount * 0.6), 2.35), 1.3);
       break;
     }
     case 'neural':
@@ -369,6 +372,9 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       if (disposed || w <= 0 || h <= 0) return;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
       renderer.setSize(w, h, false);
+      // Points scale with the object, not the screen: a 180px core keeps the
+      // same visual density as a 560px one.
+      pointU.uPixel.value = Math.max(7, renderer.domElement.height * 0.038);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     },
@@ -394,7 +400,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       if (pointsObj) pointsObj.rotation.y = -elapsed * spin * 0.55;
       if (linksObj && pointsObj) linksObj.rotation.y = pointsObj.rotation.y;
       for (const o of orbiters) o.obj.rotation[o.axis] += 0.015 * o.rate * motionScale;
-      lineMat.opacity = (dark ? 0.07 : 0.12) + current.energy * (dark ? 0.09 : 0.1);
+      lineMat.opacity = (dark ? 0.13 : 0.14) + current.energy * (dark ? 0.12 : 0.1);
 
       camera.position.x += ((px - 0.5) * 0.5 - camera.position.x) * 0.05;
       camera.position.y += (-(py - 0.5) * 0.35 - camera.position.y) * 0.05;

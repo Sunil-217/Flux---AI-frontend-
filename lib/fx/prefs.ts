@@ -101,7 +101,7 @@ export const ENVIRONMENTS: { key: Environment; label: string; blurb: string }[] 
 
 const MOTION_SCALE: Record<Motion, number> = { off: 0, calm: 0.45, normal: 1, lively: 1.6 };
 const SPEED_SCALE: Record<Speed, number> = { slow: 1.6, normal: 1, fast: 0.6 };
-const PARTICLE_COUNT: Record<Particles, number> = { low: 420, medium: 900, high: 1600 };
+const PARTICLE_COUNT: Record<Particles, number> = { low: 600, medium: 1300, high: 2200 };
 
 export function particleCount(p: Particles): number {
   return PARTICLE_COUNT[p];

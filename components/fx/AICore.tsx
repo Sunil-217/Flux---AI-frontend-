@@ -147,12 +147,29 @@ export function AICore({ state = 'idle', size = 280, className = '', label, pres
       if (onScreen) void boot();
     };
 
+    // A core that has been offscreen for a while gives its WebGL context back
+    // instead of holding one of the browser's handful for a hidden element —
+    // this is what happens to the phone core once the viewport crosses to lg.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = null;
+    };
+
     const io = new IntersectionObserver(
       (entries) => {
         onScreen = entries.some((e) => e.isIntersecting);
-        if (!onScreen) stop();
-        else if (!handleRef.current) void boot();
-        else kick();
+        if (!onScreen) {
+          stop();
+          cancelIdle();
+          idleTimer = setTimeout(() => {
+            if (!onScreen && !cancelled) teardown();
+          }, 8000);
+        } else {
+          cancelIdle();
+          if (!handleRef.current) void boot();
+          else kick();
+        }
       },
       { rootMargin: '128px' },
     );
@@ -195,6 +212,7 @@ export function AICore({ state = 'idle', size = 280, className = '', label, pres
 
     return () => {
       cancelled = true;
+      cancelIdle();
       io.disconnect();
       ro.disconnect();
       mo.disconnect();

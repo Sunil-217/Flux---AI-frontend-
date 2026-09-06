@@ -86,15 +86,6 @@
   --fx-env-grid: 0.055;
 }
 
-[data-fx-contrast="on"] {
-  --fx-edge-neutral: color-mix(in srgb, var(--ink) 22%, transparent);
-  --fx-env-grid: 0.11;
-}
-[data-fx-contrast="on"] .fx-glass,
-[data-fx-contrast="on"] .fx-console,
-[data-fx-contrast="on"] .fx-rail-nav {
-  --line: color-mix(in srgb, var(--ink) 24%, transparent);
-}
 
 /* ── Layer 0 + 1: the room ──────────────────────────────────────────────── */
 
@@ -271,6 +262,26 @@
 [data-fx-env="dark-matter"] { --fx-env-wash: calc(0.03 * var(--fx-glow)); }
 [data-fx-env="dark-matter"] .fx-env__lens { opacity: 1; }
 [data-fx-env="dark-matter"] .fx-env__horizon { opacity: 0.2; }
+
+/* ── High contrast ─────────────────────────────────────────────────────────
+   Declared after the environment presets on purpose: an accessibility choice
+   outranks a decorative one, and [data-fx-env] shares its specificity, so the
+   later block is what makes it win. */
+[data-fx-contrast="on"] {
+  --fx-edge: color-mix(in srgb, var(--accent) calc(42% * var(--fx-glow) + 26%), transparent);
+  --fx-edge-soft: color-mix(in srgb, var(--accent) calc(18% * var(--fx-glow) + 18%), transparent);
+  --fx-edge-neutral: color-mix(in srgb, var(--ink) 26%, transparent);
+  --fx-env-grid: 0.13;
+}
+[data-fx-contrast="on"] .fx-glass,
+[data-fx-contrast="on"] .fx-console,
+[data-fx-contrast="on"] .fx-rail-nav,
+[data-fx-contrast="on"] .fx-module,
+[data-fx-contrast="on"] .fx-tile {
+  --line: color-mix(in srgb, var(--ink) 30%, transparent);
+  border-color: var(--fx-edge-neutral);
+}
+
 
 @keyframes fx-drift  { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 2%, 0) scale(1.06); } }
 @keyframes fx-grid-run { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--fx-env-grid-size), 0 var(--fx-env-grid-size); } }
@@ -530,6 +541,10 @@
 @keyframes fx-nucleus { 0%, 100% { transform: scale(1); opacity: 0.92; } 50% { transform: scale(1.06); opacity: 1; } }
 .fx-core[data-webgl="on"] .fx-core__css { display: none; }
 [data-fx-webgl="off"] .fx-core__canvas { display: none; }
+/* Defensive: the host clears data-webgl on rebuild, but the fallback must never
+   depend on that having happened — otherwise switching WebGL off can leave an
+   empty hole where the core was. */
+[data-fx-webgl="off"] .fx-core[data-webgl="on"] .fx-core__css { display: grid; }
 
 /* ── Agent network ──────────────────────────────────────────────────────── */
 

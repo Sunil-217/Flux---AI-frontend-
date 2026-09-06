@@ -249,40 +249,50 @@ const FEATURES: { icon: ReactNode; title: string; desc: string }[] = [
  */
 function Stage() {
   return (
-    <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden>
-      {/* Layer 4 — the core, low and left, at depth. */}
-      <div className="absolute left-[9%] top-[64%] -translate-y-1/2 opacity-80 xl:left-[12%] 2xl:scale-110">
-        <AICore state="idle" size={500} />
+    /* Bounded to the left field — it stops where the sign-in column begins, so
+       nothing here can ever slide under the card at any width. */
+    <div className="pointer-events-none absolute inset-y-0 left-0 right-[44%] hidden lg:block" aria-hidden>
+      {/* Layer 1 — the core, low and centred in the field, behind the copy. */}
+      <div className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 opacity-95 xl:scale-110 2xl:scale-125">
+        <AICore state="idle" size={440} />
       </div>
 
-      {/* Copy sits above the core's upper rim; the core rises behind the
-          capability modules at the bottom. Nothing is written across it. */}
-      <div className="absolute left-[7%] top-[15%] max-w-[34rem] fx-seq xl:left-[9%]">
-        <p className="fx-label mb-5">Flux Intelligence · Document Intelligence</p>
-        <h2 className="fx-display text-[3.1rem] xl:text-[3.9rem] 2xl:text-[4.4rem]">
-          The next
-          <br />
-          intelligence layer.
-        </h2>
-        <p className="mt-6 max-w-md text-[15px] leading-relaxed text-[var(--ink-3)]">
-          Upload anything and ask away. Close AI reads, reasons, and cites — so every answer is grounded in your own sources.
-        </p>
-      </div>
+      {/* Layer 3 — copy at the top, capability modules at the foot. Flexbox
+          keeps them apart at every height instead of guessing percentages. */}
+      {/* Top padding clears the pinned wordmark rather than guessing a
+          percentage that collides at short viewport heights. */}
+      <div className="absolute inset-0 flex flex-col justify-between px-[9%] pt-28 pb-[9%] xl:pt-32">
+        <div className="fx-seq max-w-[34rem]">
+          <p className="fx-label mb-4">Flux Intelligence · Document Intelligence</p>
+          <h2 className="fx-display text-[2.4rem] leading-[1.04] xl:text-[3.2rem] 2xl:text-[4rem]">
+            The next
+            <br />
+            intelligence layer.
+          </h2>
+          <p className="mt-5 max-w-sm text-[14px] leading-relaxed text-[var(--ink-3)] xl:text-[15px]">
+            Upload anything and ask away. Close AI reads, reasons, and cites — so every answer is grounded in your own sources.
+          </p>
+        </div>
 
-      {/* Capabilities as instrument modules along the bottom-left. Each is a
-          real feature; the numbering is an index, not a metric. */}
-      <ul className="absolute left-[7%] bottom-[8%] flex gap-3 xl:left-[9%]">
-        {FEATURES.map((f, i) => (
-          <li key={f.title} className="fx-glass w-[13.5rem] p-3.5 pointer-events-auto fx-lift fx-sheen" onPointerMove={trackLocalPointer}>
-            <div className="flex items-start justify-between">
-              <FeatureIcon>{f.icon}</FeatureIcon>
-              <span className="fx-label tabular-nums pt-0.5">{String(i + 1).padStart(2, '0')}</span>
-            </div>
-            <p className="mt-3 text-[13px] font-semibold text-[var(--ink)]">{f.title}</p>
-            <p className="mt-0.5 text-[12px] leading-snug text-[var(--ink-3)]">{f.desc}</p>
-          </li>
-        ))}
-      </ul>
+        {/* Real features, numbered as an index — not a metric. The third is
+            held back until there is width for it. */}
+        <ul className="flex gap-2.5">
+          {FEATURES.map((f, i) => (
+            <li
+              key={f.title}
+              className={`fx-glass pointer-events-auto fx-lift fx-sheen w-[12rem] p-3 ${i === 2 ? 'hidden 2xl:block' : ''}`}
+              onPointerMove={trackLocalPointer}
+            >
+              <div className="flex items-start justify-between">
+                <FeatureIcon>{f.icon}</FeatureIcon>
+                <span className="fx-label tabular-nums pt-0.5">{String(i + 1).padStart(2, '0')}</span>
+              </div>
+              <p className="mt-2.5 text-[12.5px] font-semibold text-[var(--ink)]">{f.title}</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--ink-3)]">{f.desc}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="grain-overlay" />
     </div>
@@ -510,7 +520,13 @@ export function AuthScreen() {
       </div>
 
       {/* ── Sign-in column: centred on phones, floated right on the stage ── */}
-      <main className="relative flex flex-1 items-center justify-center px-5 pt-24 pb-10 sm:px-8 lg:justify-end lg:px-0 lg:pr-[8%] lg:pt-0 lg:pb-0">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-5 pt-24 pb-10 sm:px-8 lg:flex-row lg:justify-end lg:px-0 lg:pr-[8%] lg:pt-0 lg:pb-0">
+        {/* Phone / tablet composition: the core sits in the gap between the
+            wordmark and the card, fully visible, instead of hiding behind it.
+            One low-density instance; the desktop stage is not rendered here. */}
+        <div className="mb-6 lg:hidden" aria-hidden>
+          <AICore state="idle" size={132} />
+        </div>
         {/* Card: entrance + cursor-follow 3D tilt + specular highlight. */}
         <div
           ref={cardRef}
@@ -523,12 +539,6 @@ export function AuthScreen() {
             transformStyle: 'preserve-3d',
           }}
         >
-          {/* Phone / tablet composition: one small core anchored to the card so
-              it is always centred behind the logo whatever the viewport height.
-              A single low-density instance — the stage above is not rendered. */}
-          <div className="pointer-events-none absolute left-1/2 -top-[3.75rem] -translate-x-1/2 opacity-70 lg:hidden" aria-hidden>
-            <AICore state="idle" size={180} />
-          </div>
           <div className="fx-glass fx-glass--xl relative w-full p-8">
             {/* Specular highlight that follows the cursor */}
             <div
