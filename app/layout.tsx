@@ -9,6 +9,7 @@ import {
   JetBrains_Mono,
 } from 'next/font/google';
 import './globals.css';
+import './futuristic.css'; // the 2070 layer — built on the tokens globals.css defines
 import 'highlight.js/styles/github-dark.css'; // syntax highlighting for code blocks
 import 'katex/dist/katex.min.css'; // LaTeX math rendering
 

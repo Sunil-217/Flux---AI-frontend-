@@ -3,6 +3,7 @@
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { AuthScreen } from '@/components/auth/AuthScreen';
+import { Atmosphere } from '@/components/fx/Atmosphere';
 import { AppLayout } from './AppLayout';
 import { Logo } from './Logo';
 
@@ -11,6 +12,10 @@ export function AppRoot() {
 
   return (
     <>
+      {/* The room every screen sits in. One fixed, contained layer — it is
+          behind the app shell, so nothing below it reflows. */}
+      <Atmosphere />
+
       <Toaster
         position="top-right"
         gutter={8}

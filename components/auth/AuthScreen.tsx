@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import toast from 'react-hot-toast';
+import { AICore } from '@/components/fx/AICore';
+import { trackLocalPointer } from '@/components/fx/Atmosphere';
 import { Logo } from '@/components/layout/Logo';
 import { useAuth } from './AuthProvider';
 import {
@@ -235,13 +237,14 @@ const FEATURES: { icon: ReactNode; title: string; desc: string }[] = [
 function BrandPanel() {
   return (
     <aside className="relative hidden lg:flex w-[46%] xl:w-[42%] flex-col justify-between overflow-hidden border-r border-[var(--line)] p-12 xl:p-16">
-      {/* Ambient: cropped Aperture glyph + a soft, breathing accent orb. */}
+      {/* Ambient. The intelligence core sits behind the copy, bled off the left
+          edge — present as an object in the room rather than an illustration
+          placed next to the text. `idle` is the truthful state here: nothing is
+          running on a sign-in screen, and the core never claims otherwise. */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <div className="brand-glyph" />
-        <div
-          className="absolute -bottom-24 -left-24 h-96 w-96 rounded-full blur-3xl animate-glow-pulse"
-          style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%)' }}
-        />
+        <div className="absolute -left-[18%] top-1/2 -translate-y-1/2 opacity-[0.85]">
+          <AICore state="idle" size={520} />
+        </div>
         <div className="grain-overlay" />
       </div>
 
@@ -251,27 +254,40 @@ function BrandPanel() {
           <Logo size={34} />
         </div>
         <span className="text-lg font-semibold tracking-tight text-[var(--ink)]">Close AI</span>
+        <span className="fx-label ml-1 pt-[3px]">Fluxera</span>
       </div>
 
       {/* Headline + value props */}
-      <div className="relative max-w-md">
-        <h2 className="font-display text-[2.4rem] xl:text-[2.8rem] leading-[1.08] tracking-tight text-[var(--ink)]">
-          Your documents,
+      <div className="relative max-w-md fx-seq">
+        <p className="fx-label mb-5">Document Intelligence</p>
+
+        <h2 className="fx-display text-[2.7rem] xl:text-[3.35rem]">
+          The next
           <br />
-          <span className="text-gradient">answered.</span>
+          intelligence layer.
         </h2>
-        <p className="mt-4 text-[15px] leading-relaxed text-[var(--ink-3)]">
+
+        <p className="mt-5 text-[15px] leading-relaxed text-[var(--ink-3)]">
           Upload anything and ask away. Close AI reads, reasons, and cites — so every answer is grounded in your own sources.
         </p>
 
-        <ul className="mt-10 space-y-6">
-          {FEATURES.map((f) => (
-            <li key={f.title} className="flex items-start gap-4">
+        {/* The same three capabilities, presented as instrument panels. Each is
+            a real feature of the product; nothing here is a metric. */}
+        <ul className="mt-9 space-y-2.5">
+          {FEATURES.map((f, i) => (
+            <li
+              key={f.title}
+              className="fx-holo fx-lift fx-sheen flex items-start gap-3.5 p-3.5"
+              onPointerMove={trackLocalPointer}
+            >
               <FeatureIcon>{f.icon}</FeatureIcon>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--ink)]">{f.title}</p>
                 <p className="mt-0.5 text-[13px] leading-relaxed text-[var(--ink-3)]">{f.desc}</p>
               </div>
+              <span className="fx-label ml-auto shrink-0 pt-0.5 tabular-nums">
+                {String(i + 1).padStart(2, '0')}
+              </span>
             </li>
           ))}
         </ul>

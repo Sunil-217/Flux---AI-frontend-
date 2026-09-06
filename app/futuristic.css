@@ -1,0 +1,488 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Flux AI — the 2070 layer.
+
+   Loaded AFTER globals.css, and built entirely from the tokens defined there
+   (--accent, --line, --ink*, --panel …). That is the whole trick: the 64 app
+   templates and the accent picker write those same variables at runtime, so
+   every surface below re-tints with them instead of fighting them. Nothing
+   here hard-codes a colour that a template is allowed to change.
+
+   Restraint is the point. A 2070 interface is not "more neon" — it is depth,
+   volume and precision. Effects are large, slow and quiet; the loud ones are
+   reserved for moments that actually mean something (a task running, a
+   document indexing). Everything obeys prefers-reduced-motion, and everything
+   expensive stops when the tab is hidden.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── Atmosphere ───────────────────────────────────────────────────────────
+   A room, not a background: one volumetric wash that drifts, a fine technical
+   grid that recedes, and a horizon line. Painted with pseudo-elements on a
+   fixed layer so nothing reflows and nothing repaints on scroll. */
+
+.fx-atmosphere {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+}
+
+/* Volumetric light — two slow, very low-opacity masses. Deliberately under
+   0.1 alpha: the eye should register depth, not colour. */
+.fx-atmosphere::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(38rem 30rem at 22% 18%,
+      color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+    radial-gradient(46rem 34rem at 82% 74%,
+      color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%);
+  filter: blur(28px);
+  animation: fx-drift 44s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Technical grid, in perspective so it reads as a floor rather than wallpaper.
+   Masked to fade out before it reaches the content. */
+.fx-atmosphere::after {
+  content: "";
+  position: absolute;
+  left: -50%;
+  right: -50%;
+  bottom: -46%;
+  height: 92%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--ink) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ink) 7%, transparent) 1px, transparent 1px);
+  background-size: 58px 58px;
+  transform: perspective(46rem) rotateX(74deg);
+  transform-origin: 50% 100%;
+  mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  -webkit-mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  opacity: 0.5;
+  animation: fx-grid-run 26s linear infinite;
+  will-change: background-position;
+}
+
+@keyframes fx-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to   { transform: translate3d(2%, 2%, 0) scale(1.06); }
+}
+
+@keyframes fx-grid-run {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 58px, 0 58px; }
+}
+
+/* A single horizon rule. One line does more for "spatial" than ten effects. */
+.fx-horizon {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 38%;
+  height: 1px;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 26%, transparent) 32%,
+    color-mix(in srgb, var(--accent) 40%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 26%, transparent) 68%,
+    transparent);
+  opacity: 0.4;
+  filter: blur(0.4px);
+}
+
+/* ── Holographic surfaces ────────────────────────────────────────────────
+   Glass with a machined edge: a hairline gradient border, an inner top sheen,
+   and depth that bleeds a little accent. Used for panels that should feel
+   like hardware. */
+
+.fx-holo {
+  position: relative;
+  background:
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--ink) 5%, transparent),
+      transparent 42%),
+    var(--panel);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: 18px;
+  box-shadow:
+    0 1px 0 0 color-mix(in srgb, var(--ink) 9%, transparent) inset,
+    0 24px 60px -28px rgba(0, 0, 0, 0.75),
+    0 0 0 1px color-mix(in srgb, var(--line) 90%, transparent);
+}
+
+/* The machined edge — a gradient ring drawn with a mask so it stays 1px at
+   any radius and follows the accent. */
+.fx-holo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, var(--accent) 42%, transparent),
+    transparent 32%,
+    transparent 68%,
+    color-mix(in srgb, var(--accent) 22%, transparent));
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+/* ── Energy border ───────────────────────────────────────────────────────
+   For elements that are ACTIVE right now. A travelling highlight around the
+   edge — reserved for real activity, never decoration. */
+
+.fx-energy::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--fx-angle, 0deg),
+    transparent 0deg,
+    color-mix(in srgb, var(--accent) 85%, transparent) 26deg,
+    transparent 62deg,
+    transparent 360deg);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  animation: fx-spin 2.6s linear infinite;
+  pointer-events: none;
+}
+
+@property --fx-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes fx-spin {
+  to { --fx-angle: 360deg; }
+}
+
+/* Firefox and any engine without @property still gets a quiet pulse rather
+   than a frozen ring. */
+@supports not (background: conic-gradient(from var(--fx-angle, 0deg), red, blue)) {
+  .fx-energy::after {
+    background: linear-gradient(120deg,
+      color-mix(in srgb, var(--accent) 60%, transparent), transparent 60%);
+    animation: fx-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes fx-breathe {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.9; }
+}
+
+/* ── Scan ────────────────────────────────────────────────────────────────
+   One slow pass across a surface. Used while something is genuinely being
+   read — a document being indexed, a panel loading. Not an idle overlay. */
+
+.fx-scan {
+  position: relative;
+  overflow: hidden;
+}
+
+.fx-scan::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  top: -34%;
+  background: linear-gradient(180deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 20%, transparent) 46%,
+    color-mix(in srgb, var(--accent) 32%, transparent) 52%,
+    transparent);
+  animation: fx-sweep 2.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes fx-sweep {
+  0%   { top: -34%; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── Data stream ─────────────────────────────────────────────────────────
+   A hairline that fills to show real progress through a known sequence. */
+
+.fx-stream {
+  position: relative;
+  height: 1px;
+  background: color-mix(in srgb, var(--line) 100%, transparent);
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.fx-stream > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 70%, transparent),
+    color-mix(in srgb, var(--accent) 100%, transparent));
+  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Indeterminate: we know work is happening, not how far along it is. Saying
+   "62%" when nothing reports a percentage would be inventing a metric. */
+.fx-stream[data-indeterminate="true"] > i {
+  width: 34%;
+  animation: fx-indeterminate 1.5s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
+@keyframes fx-indeterminate {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+/* ── Cinematic type ──────────────────────────────────────────────────────
+   Large, tight, quiet. The drama comes from scale and spacing, not weight. */
+
+.fx-display {
+  font-family: var(--app-display-font, var(--font-space-grotesk)), var(--font-geist-sans), sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  background: linear-gradient(178deg,
+    var(--ink) 8%,
+    color-mix(in srgb, var(--ink) 62%, transparent) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-wrap: balance;
+}
+
+/* Small caps technical label — the "instrument panel" voice. */
+.fx-label {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+/* ── Depth + pointer response ────────────────────────────────────────────
+   --fx-mx/--fx-my are 0..1 pointer coordinates set by useFxPointer. A single
+   variable pair drives every parallax and light response, so one rAF-throttled
+   listener serves the whole page instead of one per component. */
+
+.fx-lift {
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.34s ease,
+    border-color 0.24s ease;
+  will-change: transform;
+}
+
+.fx-lift:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 0 0 color-mix(in srgb, var(--ink) 12%, transparent) inset,
+    0 30px 70px -30px rgba(0, 0, 0, 0.85),
+    0 0 34px -14px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* Cursor-reactive sheen. The highlight tracks the pointer across the surface
+   rather than sitting in a fixed corner. */
+.fx-sheen {
+  position: relative;
+  isolation: isolate;
+}
+
+.fx-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    22rem 22rem at calc(var(--fx-lx, 0.5) * 100%) calc(var(--fx-ly, 0.5) * 100%),
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.fx-sheen:hover::after { opacity: 1; }
+
+/* Magnetic press — weight, not bounce. */
+.fx-press {
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+}
+.fx-press:active { transform: scale(0.975); }
+.fx-press:hover  { filter: brightness(1.06); }
+
+/* ── Reveal ──────────────────────────────────────────────────────────────
+   Fast enough to feel like the interface booting, not an intro sequence.
+   The whole sequence completes in well under a second. */
+
+@keyframes fx-materialise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+.fx-in { animation: fx-materialise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fx-seq > * { animation: fx-materialise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fx-seq > *:nth-child(1) { animation-delay: 0.04s; }
+.fx-seq > *:nth-child(2) { animation-delay: 0.11s; }
+.fx-seq > *:nth-child(3) { animation-delay: 0.18s; }
+.fx-seq > *:nth-child(4) { animation-delay: 0.25s; }
+.fx-seq > *:nth-child(5) { animation-delay: 0.32s; }
+.fx-seq > *:nth-child(6) { animation-delay: 0.39s; }
+
+/* ── Accessibility ───────────────────────────────────────────────────────
+   Every ambient animation stops. Structure, depth and colour all remain, so
+   the interface still looks like itself — it simply holds still. */
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-atmosphere::before,
+  .fx-atmosphere::after,
+  .fx-energy::after,
+  .fx-scan::before,
+  .fx-stream[data-indeterminate="true"] > i {
+    animation: none !important;
+  }
+  .fx-scan::before { display: none; }
+  .fx-in,
+  .fx-seq > * { animation: none !important; opacity: 1; transform: none; filter: none; }
+  .fx-lift:hover { transform: none; }
+}
+
+/* Focus must survive every effect above it. */
+.fx-holo :focus-visible,
+.fx-press:focus-visible,
+.fx-lift:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* ── AI core ─────────────────────────────────────────────────────────────
+   Host box for the WebGL canvas, and a complete CSS core for when WebGL is
+   unavailable. The fallback is designed, not apologetic: concentric rings on
+   different axes and a lit nucleus read as a three-dimensional object without
+   a single polygon. */
+
+.fx-core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.fx-core__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Ambient bleed under the core, so it sits IN the page rather than on it. */
+.fx-core::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--accent) 24%, transparent),
+    transparent 62%);
+  filter: blur(30px);
+  opacity: 0.42;
+  z-index: -1;
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.fx-core--thinking::before   { opacity: 0.85; transform: scale(1.05); }
+.fx-core--generating::before { opacity: 1;    transform: scale(1.09); }
+.fx-core--searching::before  { opacity: 0.9;  transform: scale(1.12); }
+.fx-core--error::before      { opacity: 0.35; transform: scale(0.96); }
+
+/* ── CSS fallback ── */
+.fx-core__css {
+  position: relative;
+  width: 78%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
+.fx-core__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 22px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.fx-core__ring--1 { animation: fx-ring-a 14s linear infinite; }
+.fx-core__ring--2 { inset: 12%; border-color: color-mix(in srgb, var(--accent) 26%, transparent); animation: fx-ring-b 19s linear infinite; }
+.fx-core__ring--3 { inset: 24%; border-color: color-mix(in srgb, var(--ink) 16%, transparent); animation: fx-ring-c 24s linear infinite; }
+
+.fx-core__nucleus {
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%,
+    color-mix(in srgb, var(--accent) 92%, white 18%),
+    color-mix(in srgb, var(--accent) 68%, transparent) 55%,
+    transparent 72%);
+  box-shadow: 0 0 42px -4px color-mix(in srgb, var(--accent) 80%, transparent);
+  animation: fx-nucleus 4.2s ease-in-out infinite;
+}
+
+@keyframes fx-ring-a { to { transform: rotateX(68deg) rotateZ(360deg); } }
+@keyframes fx-ring-b { to { transform: rotateY(70deg) rotateZ(-360deg); } }
+@keyframes fx-ring-c { to { transform: rotateX(28deg) rotateY(46deg) rotateZ(360deg); } }
+@keyframes fx-nucleus {
+  0%, 100% { transform: scale(1);    opacity: 0.92; }
+  50%      { transform: scale(1.07); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-core__ring,
+  .fx-core__nucleus { animation: none !important; }
+  .fx-core__ring--1 { transform: rotateX(68deg); }
+  .fx-core__ring--2 { transform: rotateY(70deg); }
+  .fx-core__ring--3 { transform: rotateX(28deg) rotateY(46deg); }
+}
+
+/* WebGL took over: hide the CSS core underneath it rather than unmounting it,
+   so the enhancement can fail at any moment and the base is still there. */
+.fx-core[data-webgl="on"] .fx-core__css { display: none; }

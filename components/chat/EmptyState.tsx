@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { AICore } from '@/components/fx/AICore';
 import { Logo } from '@/components/layout/Logo';
 import { Agenda, deriveAgenda } from './Agenda';
 import { useT } from '@/lib/i18n';
@@ -180,11 +181,19 @@ export function EmptyState({
   if (!isReturning) {
     return (
       <div className="relative home-stagger flex flex-col items-center justify-center h-full px-6 text-center select-none overflow-hidden">
-        <div className="brand-glyph" aria-hidden />
-        <div className="relative mb-7">
-          <Logo size={68} />
+        {/* The core sits behind the wordmark rather than replacing it — the
+            brand stays the brand. `idle` is truthful: this screen only exists
+            when nothing is running. */}
+        <div className="relative mb-7 grid place-items-center">
+          <div className="absolute inset-0 grid place-items-center" aria-hidden>
+            <AICore state="idle" size={300} className="opacity-80" />
+          </div>
+          <div className="relative">
+            <Logo size={68} />
+          </div>
         </div>
-        <h2 className="text-3xl sm:text-4xl font-display font-medium mb-3 tracking-tight text-[var(--ink)]">
+        <p className="fx-label mb-3">Close AI · Document Intelligence</p>
+        <h2 className="fx-display text-3xl sm:text-[2.6rem] mb-3">
           {hasSession ? t('What are we working on?') : 'Welcome to Close AI'}
         </h2>
         <p className="text-sm text-[var(--ink-3)] mb-8 max-w-md leading-relaxed">
