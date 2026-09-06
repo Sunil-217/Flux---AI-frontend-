@@ -24,6 +24,9 @@ interface ChatDeps {
 export function useChat(sessionId: string | null, deps: ChatDeps) {
   const { addMessage, patchMessage, beginVariant, patchVariant, persist } = deps;
   const [isLoading, setIsLoading] = useState(false);
+  // Latest high-level stage from the agent path ("Researching", "Verifying").
+  // Empty on the ordinary chat path, which sends no status events.
+  const [status, setStatus] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
   // Stop the in-flight response (keeps whatever streamed in so far).
@@ -46,6 +49,9 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
       const handlers: StreamHandlers = {
         onToken: (t) => {
           acc += t;
+          // The first token is the answer arriving — the stage label has done
+          // its job and would otherwise sit under a reply that is already there.
+          setStatus('');
           if (!assistantId) {
             assistantId = uuidv4();
             addMessage(sessionId, {
@@ -63,6 +69,18 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
           pendingSources = s;
           if (assistantId) patchMessage(sessionId, assistantId, { sources: s });
         },
+        onStatus: (label) => setStatus(label),
+        onImage: (dataUri) => {
+          setStatus('');
+          assistantId = uuidv4();
+          addMessage(sessionId, {
+            id: assistantId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            image: dataUri,
+          });
+        },
         onError: (message) => {
           streamError = true;
           toast.error(message || 'Failed to get a response. Please try again.');
@@ -79,6 +97,9 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
         }
       } finally {
         abortRef.current = null;
+        // Always clear, including on abort and error — a stale "Researching…"
+        // left under a stopped reply reads as a request still running.
+        setStatus('');
         if (assistantId) persist(sessionId);
       }
     },
@@ -151,5 +172,5 @@ export function useChat(sessionId: string | null, deps: ChatDeps) {
     [sessionId, isLoading, beginVariant, patchVariant, patchMessage, persist]
   );
 
-  return { isLoading, sendMessage, resendQuestion, regenerateVariant, stop } as const;
+  return { isLoading, status, sendMessage, resendQuestion, regenerateVariant, stop } as const;
 }

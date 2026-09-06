@@ -400,7 +400,28 @@ export interface StreamHandlers {
   onToken: (text: string) => void;
   onSources?: (sources: Source[]) => void;
   onError?: (message: string) => void;
+  /**
+   * High-level progress from the autonomous agent path ("Planning",
+   * "Researching", "Verifying"). Never the model's reasoning — the backend
+   * sends a fixed vocabulary of stage labels, not chain-of-thought.
+   *
+   * /chat never emits these, so this stays undefined on the ordinary path.
+   */
+  onStatus?: (label: string, stage: string) => void;
+  /** A generated image (data URI) returned instead of text. */
+  onImage?: (dataUri: string) => void;
 }
+
+/**
+ * Route chat through POST /agent/task instead of POST /chat.
+ *
+ * Off by default. /agent/task is a superset — it delegates anything that is not
+ * a genuine multi-step goal straight back to the ordinary chat stream — but
+ * "safe by design" is not the same as "measured in production", and this
+ * changes the path every message takes. Set NEXT_PUBLIC_AGENT_TASKS=true to
+ * enable it; the backend has its own kill switch (AGENT_ORCHESTRATION_ENABLED).
+ */
+export const AGENT_TASKS_ENABLED = process.env.NEXT_PUBLIC_AGENT_TASKS === 'true';
 
 // Response-style preferences (set in Settings → Appearance), read at send time.
 export const STYLE_KEY = 'close_ai_style';
@@ -468,7 +489,10 @@ export async function streamQuestion(
 ): Promise<void> {
   const active_docs = activeDocsFor(chatId);
   const token = getToken();
-  const res = await fetch(`${API_BASE}/chat`, {
+  // The two endpoints take an identical body; only the path differs. An image
+  // turn always uses /chat — vision is not an agent task.
+  const path = AGENT_TASKS_ENABLED && !image ? '/agent/task' : '/chat';
+  const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -513,10 +537,18 @@ export async function streamQuestion(
           content?: string;
           sources?: Source[];
           message?: string;
+          label?: string;
+          stage?: string;
+          image?: string;
         };
         if (evt.type === 'token' && evt.content) handlers.onToken(evt.content);
         else if (evt.type === 'sources' && evt.sources) handlers.onSources?.(evt.sources);
         else if (evt.type === 'error') handlers.onError?.(evt.message ?? 'Error');
+        else if (evt.type === 'status' && evt.label) handlers.onStatus?.(evt.label, evt.stage ?? '');
+        else if (evt.type === 'image' && evt.image) handlers.onImage?.(evt.image);
+        // 'task' carries the full plan/step state for debugging. Deliberately
+        // not surfaced: it is internal detail, and rendering it would be the
+        // chain-of-thought leak the status vocabulary exists to avoid.
       } catch {
         /* ignore malformed chunk */
       }
