@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getMemoryFacts, deleteMemoryFact } from '@/services/api';
+import { AgentNetwork } from '@/components/fx/AgentNetwork';
 import { useFeatures } from '@/components/providers/FeatureProvider';
 import type { ChatSession } from '@/types';
 
@@ -93,11 +94,17 @@ export function ContextRail({
   onAddUrl,
   onResearch,
   onQuiz,
+  status = '',
+  running = false,
 }: {
   session: ChatSession | null;
   onAddUrl: () => void;
   onResearch: () => void;
   onQuiz: () => void;
+  /** Current stage label from the agent path — '' on the ordinary chat path. */
+  status?: string;
+  /** True while a request is in flight. */
+  running?: boolean;
 }) {
   const { enabled } = useFeatures();
   const [open, setOpen] = useState(readRailOpen);
@@ -205,7 +212,7 @@ export function ContextRail({
   }
 
   return (
-    <aside className="hidden xl:flex flex-col flex-shrink-0 w-72 border-l border-[var(--line)] bg-[var(--panel)] overflow-y-auto">
+    <aside className="fx-rail hidden xl:flex flex-col flex-shrink-0 w-72 border-l border-[var(--line)] bg-[var(--panel)] overflow-y-auto">
       {/* Presence header — this panel is the AI's working state */}
       <div className="flex items-center justify-between px-4 pt-4 pb-1">
         <h2 className="flex items-center gap-2 text-xs font-semibold text-[var(--ink-2)]">
@@ -223,6 +230,14 @@ export function ContextRail({
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
         </button>
+      </div>
+
+      {/* ── Agent pipeline ──
+          Reflects stages the backend actually reported over SSE. Nothing is
+          modelled or predicted here: an unlit node means the run never touched
+          that agent, and "Awaiting data" is the honest resting state. */}
+      <div className="px-4 pt-1 pb-3">
+        <AgentNetwork status={status} running={running} />
       </div>
 
       <div className="px-4 pb-5 divide-y divide-[var(--line)]">

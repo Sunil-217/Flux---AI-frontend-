@@ -3,6 +3,8 @@
 import { useRef, useEffect, useState, type DragEvent } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { DocumentScanner } from '@/components/fx/DocumentScanner';
+import type { ScanState } from '@/hooks/useFileUpload';
 import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
@@ -43,6 +45,8 @@ function readSelectedDocs(sessionId: string | undefined, uploadedFiles: string[]
 interface Props {
   session: ChatSession | null;
   isLoading: boolean;
+  /** Live indexing lifecycle for a document being added to this session. */
+  scan?: ScanState;
   /** Current stage on the autonomous agent path; '' on the ordinary path. */
   status?: string;
   isUploading: boolean;
@@ -75,6 +79,7 @@ interface Props {
 export function ChatArea({
   session,
   isLoading,
+  scan,
   status,
   isUploading,
   uploadedFile,
@@ -627,7 +632,10 @@ export function ChatArea({
 
       {/* Input */}
       <div className="flex-shrink-0 px-4 pb-4 pt-2 print:hidden">
-        <div className="max-w-3xl mx-auto w-full">
+        <div className="relative max-w-3xl mx-auto w-full">
+          {/* Indexing readout, anchored above the composer. Every line comes
+              from a real event; it clears itself once the result has been read. */}
+          {scan && <DocumentScanner scan={scan} />}
           <ChatInput
             onSend={onSendMessage}
             disabled={isLoading || !session}

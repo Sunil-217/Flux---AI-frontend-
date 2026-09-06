@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AICore } from '@/components/fx/AICore';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { Logo } from '@/components/layout/Logo';
 import { Agenda, deriveAgenda } from './Agenda';
 import { useT } from '@/lib/i18n';
@@ -108,6 +109,9 @@ export function EmptyState({
   onPickPrompt,
 }: Props) {
   const t = useT();
+  // The core is scaled, not dropped, on a phone: a 300px canvas on a 375px
+  // screen is most of the viewport, and the shader cost scales with area.
+  const isMobile = useIsMobile();
   const [facts, setFacts] = useState<string[]>([]);
 
   useEffect(() => {
@@ -186,7 +190,7 @@ export function EmptyState({
             when nothing is running. */}
         <div className="relative mb-7 grid place-items-center">
           <div className="absolute inset-0 grid place-items-center" aria-hidden>
-            <AICore state="idle" size={300} className="opacity-80" />
+            <AICore state="idle" size={isMobile ? 190 : 300} className="opacity-80" />
           </div>
           <div className="relative">
             <Logo size={68} />
@@ -212,7 +216,7 @@ export function EmptyState({
         {!hasSession && (
           <button
             onClick={onNewChat}
-            className="px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent-strong)] text-sm font-semibold text-white rounded-xl transition-colors active:scale-[0.98] shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
+            className="fx-press px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent-strong)] text-sm font-semibold text-white rounded-xl transition-colors shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
           >
             Start a new chat
           </button>

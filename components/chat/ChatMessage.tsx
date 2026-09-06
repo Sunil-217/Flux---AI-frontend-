@@ -1017,6 +1017,13 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
 
         {sourceGroups.length > 0 && (
           <div className="mt-3">
+            {/* What the answer was actually grounded in. Deliberately no
+                relevance score: the backend ranks passages internally but does
+                not send the number, and printing a percentage it never gave us
+                would be inventing a measurement. */}
+            <p className="fx-label mb-1.5">
+              Grounded in {sourceGroups.length} source{sourceGroups.length === 1 ? '' : 's'}
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {sourceGroups.map((group, i) => {
                 const active = openSource === i;
@@ -1025,10 +1032,10 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
                     key={group.filename}
                     onClick={() => setOpenSource(active ? null : i)}
                     title="Click to view the source text"
-                    className={`inline-flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1 border transition-colors ${
+                    className={`fx-press inline-flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1 border transition-colors ${
                       active
-                        ? 'bg-[var(--fill-hover)] border-[var(--line-strong)] text-[var(--ink)]'
-                        : 'text-[var(--ink-3)] bg-[var(--fill)] border-[var(--line)] hover:bg-[var(--fill-hover)] hover:text-[var(--ink-2)]'
+                        ? 'bg-[var(--fill-hover)] border-[color-mix(in_srgb,var(--accent)_45%,transparent)] text-[var(--ink)] shadow-[0_0_18px_-8px_color-mix(in_srgb,var(--accent)_70%,transparent)]'
+                        : 'text-[var(--ink-3)] bg-[var(--fill)] border-[var(--line)] hover:bg-[var(--fill-hover)] hover:text-[var(--ink-2)] hover:border-[var(--line-strong)]'
                     }`}
                   >
                     <svg className="w-3 h-3 flex-shrink-0 text-[var(--accent-fg)]" fill="currentColor" viewBox="0 0 20 20">

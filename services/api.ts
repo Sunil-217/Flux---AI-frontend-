@@ -380,14 +380,36 @@ export async function uploadUrl(url: string, chatId: string): Promise<string> {
 }
 
 // ── PDF upload ──
-export async function uploadFile(file: File, chatId: string): Promise<string> {
+/** What the server did with the document. Reported by /upload — never guessed:
+ *  "reused" means the identical file was already indexed and no embedding
+ *  quota was spent. */
+export type IndexingOutcome = 'indexed' | 'replaced' | 'reused';
+
+export interface UploadResult {
+  filename: string;
+  /** Chunks the server actually stored. Absent on older backends. */
+  chunks?: number;
+  outcome?: IndexingOutcome;
+}
+
+export async function uploadFile(file: File, chatId: string): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('chat_id', chatId);
-  const res = await client.post<{ filename?: string }>('/upload', formData, {
+  const res = await client.post<{
+    filename?: string;
+    total_chunks?: number;
+    indexing?: IndexingOutcome;
+  }>('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-  return res.data.filename || file.name;
+  // Both extras are optional on purpose: a backend that predates them simply
+  // reports nothing, and the UI shows nothing rather than inventing a number.
+  return {
+    filename: res.data.filename || file.name,
+    chunks: res.data.total_chunks,
+    outcome: res.data.indexing,
+  };
 }
 
 // ── Streaming chat ──

@@ -486,3 +486,246 @@
 /* WebGL took over: hide the CSS core underneath it rather than unmounting it,
    so the enhancement can fail at any moment and the base is still there. */
 .fx-core[data-webgl="on"] .fx-core__css { display: none; }
+
+/* ── Agent network ───────────────────────────────────────────────────────
+   Nodes light only once the backend has named them. A dark node means the
+   run never touched that agent — not that it is queued — so idle nodes are
+   drawn quietly rather than as empty slots waiting to be filled. */
+
+.fx-net { padding: 2px 0 0; }
+
+.fx-net__svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.fx-net__link {
+  stroke: color-mix(in srgb, var(--ink) 12%, transparent);
+  stroke-width: 1;
+  transition: stroke 0.4s ease, stroke-width 0.4s ease;
+}
+.fx-net__link[data-state="done"] {
+  stroke: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.fx-net__link[data-state="flow"] {
+  stroke: color-mix(in srgb, var(--accent) 85%, transparent);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 7;
+  animation: fx-net-flow 0.85s linear infinite;
+}
+
+@keyframes fx-net-flow {
+  to { stroke-dashoffset: -12; }
+}
+
+.fx-net__halo {
+  fill: color-mix(in srgb, var(--accent) 26%, transparent);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.4s ease;
+}
+.fx-net__node[data-state="active"] .fx-net__halo {
+  opacity: 1;
+  animation: fx-net-halo 1.7s ease-in-out infinite;
+}
+
+@keyframes fx-net-halo {
+  0%, 100% { opacity: 0.35; transform: scale(0.82); }
+  50%      { opacity: 0.9;  transform: scale(1.12); }
+}
+
+.fx-net__dot {
+  fill: var(--base);
+  stroke: color-mix(in srgb, var(--ink) 20%, transparent);
+  stroke-width: 1.2;
+  transition: fill 0.4s ease, stroke 0.4s ease;
+}
+.fx-net__node[data-state="done"] .fx-net__dot {
+  fill: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.fx-net__node[data-state="active"] .fx-net__dot {
+  fill: var(--accent);
+  stroke: color-mix(in srgb, var(--accent) 100%, white 25%);
+  stroke-width: 1.6;
+}
+
+.fx-net__label {
+  fill: var(--ink-4);
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-anchor: middle;
+  transition: fill 0.4s ease;
+}
+.fx-net__node[data-state="done"] .fx-net__label   { fill: var(--ink-3); }
+.fx-net__node[data-state="active"] .fx-net__label { fill: var(--ink); }
+
+.fx-net[data-idle="true"] .fx-net__svg { opacity: 0.45; }
+
+.fx-net__status {
+  margin-top: 2px;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  text-align: center;
+}
+.fx-net[data-idle="false"] .fx-net__status { color: var(--accent-fg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-net__link[data-state="flow"],
+  .fx-net__node[data-state="active"] .fx-net__halo { animation: none !important; }
+  .fx-net__node[data-state="active"] .fx-net__halo { opacity: 0.85; }
+}
+
+/* ── Document scanner ────────────────────────────────────────────────────
+   Floats above the composer while a source is being indexed, and settles for
+   a moment on the result before clearing itself. */
+
+.fx-scanner {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px;
+  animation: fx-materialise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+
+.fx-scanner__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fx-scanner[data-failed="true"] .fx-scanner__head .fx-label { color: #f87171; }
+
+.fx-scanner__queue { color: var(--accent-fg); }
+
+.fx-scanner__name {
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-scanner__steps {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.fx-scanner__steps li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-4);
+  transition: color 0.35s ease;
+}
+.fx-scanner__steps li[data-state="done"]   { color: var(--ink-3); }
+.fx-scanner__steps li[data-state="active"] { color: var(--ink); }
+
+.fx-scanner__pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+.fx-scanner__steps li[data-state="done"] .fx-scanner__pip {
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.fx-scanner__steps li[data-state="active"] .fx-scanner__pip {
+  background: var(--accent);
+  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+.fx-scanner__stream { display: block; margin-top: 10px; }
+
+.fx-scanner__outcome {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.fx-scanner__error {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #fca5a5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-scanner { animation: none !important; }
+}
+
+/* ── Small screens ───────────────────────────────────────────────────────
+   Not a squeezed desktop. The expensive parts of the atmosphere — a 28px
+   blur over a viewport-sized element, and backdrop-filter on every panel —
+   are the two things that turn a phone's compositor into the bottleneck, so
+   they are reduced rather than merely scaled. The design survives: the wash,
+   the grid, the machined edges and the depth are all still there.
+
+   The WebGL core needs no rule here. The desktop brand panel and the context
+   rail are display:none below their breakpoints, so on a phone those contexts
+   are never created at all, and the one core that does render asks for 380
+   particles instead of 900. */
+
+@media (max-width: 767px) {
+  .fx-atmosphere::before {
+    filter: blur(14px);
+    animation-duration: 64s;
+  }
+
+  /* The perspective grid is the single most expensive layer on a phone: a
+     transformed, masked, animated background over the whole viewport. Keep
+     it, stop moving it. */
+  .fx-atmosphere::after {
+    animation: none;
+    opacity: 0.32;
+    background-size: 44px 44px;
+  }
+
+  .fx-holo {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+  }
+
+  /* Hover states are a pointer idea. On touch they only ever fire as a sticky
+     artefact after a tap, so the lift and the sheen are simply off. */
+  .fx-lift:hover { transform: none; box-shadow: none; }
+  .fx-sheen::after { display: none; }
+
+  .fx-display { letter-spacing: -0.035em; }
+
+  .fx-scanner {
+    width: calc(100vw - 24px);
+    padding: 11px 12px;
+  }
+}
+
+/* Coarse pointers of any size — tablets included — get touch-sized targets
+   rather than pointer-sized ones. */
+@media (pointer: coarse) {
+  .fx-press:active { transform: scale(0.985); }
+  .fx-net__svg { max-width: 260px; margin: 0 auto; display: block; }
+}

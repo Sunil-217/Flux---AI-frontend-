@@ -150,7 +150,7 @@ export function AppLayout() {
     }
   );
 
-  const { isUploading, upload, uploadMany } = useFileUpload(
+  const { isUploading, scan, upload, uploadMany } = useFileUpload(
     activeSessionId,
     (filename) => {
       if (activeSessionId) {
@@ -1009,6 +1009,7 @@ export function AppLayout() {
         <ChatArea
           session={activeSession}
           isLoading={isLoading}
+          scan={scan}
           status={status}
           isUploading={isUploading}
           uploadedFile={uploadedFile}
@@ -1038,6 +1039,8 @@ export function AppLayout() {
             knowledge, memory. Workspace, not chatbot. */}
         <ContextRail
           session={activeSession}
+          status={status}
+          running={isLoading}
           onAddUrl={handleAddUrl}
           onResearch={() => insertPrompt('/research ')}
           onQuiz={() => handleSendMessage('/quiz')}

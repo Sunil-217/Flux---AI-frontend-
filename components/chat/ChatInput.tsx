@@ -573,7 +573,7 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
             aria-label="Send message"
             className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full transition-all duration-200 ${
               canSend
-                ? 'bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] text-white shadow-lg shadow-black/25 hover:scale-105 active:scale-95'
+                ? 'bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] text-white shadow-lg shadow-black/25 hover:scale-105 active:scale-95 hover:shadow-[0_0_26px_-6px_color-mix(in_srgb,var(--accent)_85%,transparent)]'
                 : 'bg-[var(--fill)] text-[var(--ink-4)] cursor-not-allowed'
             }`}
           >
