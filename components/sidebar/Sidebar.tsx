@@ -245,7 +245,7 @@ export function Sidebar({
   return (
     <aside
       className={[
-        'flex flex-col bg-[var(--panel)] backdrop-blur-xl border-r border-[var(--line)]',
+        'fx-rail-nav flex flex-col bg-[var(--panel)] backdrop-blur-xl border-r border-[var(--line)]',
         'fixed inset-y-0 left-0 z-50',
         'md:relative md:inset-auto md:z-auto',
         'w-72 md:w-[270px] flex-shrink-0 h-full',

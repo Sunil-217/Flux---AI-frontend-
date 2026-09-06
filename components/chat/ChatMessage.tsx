@@ -725,7 +725,7 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
     return (
       <div className="group animate-msg-in flex flex-col items-end">
         {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
-        <div className="max-w-[85%] bg-[var(--bubble)] text-[var(--ink)] rounded-2xl rounded-br-md border border-[var(--line)] px-4 py-2.5 text-[length:var(--chat-font-size,15px)] leading-7 shadow-sm">
+        <div className="fx-msg-user max-w-[85%] bg-[var(--bubble)] text-[var(--ink)] rounded-2xl rounded-br-md border border-[var(--line)] px-4 py-2.5 text-[length:var(--chat-font-size,15px)] leading-7 shadow-sm">
           {typeof message.image === 'string' && message.image.length > 0 ? (
             <button type="button" onClick={() => setLightbox(message.image!)} className="block cursor-zoom-in" title="Click to view full size">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -818,7 +818,10 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
     <div className="group animate-msg-in flex gap-3 items-start">
       {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
       <AssistantAvatar />
-      <div className="flex-1 min-w-0 pt-0.5 text-[length:var(--chat-font-size,15px)]">
+      <div
+        className="fx-msg-ai flex-1 min-w-0 pt-0.5 text-[length:var(--chat-font-size,15px)]"
+        data-streaming={streaming ? 'true' : 'false'}
+      >
         {message.content && (
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
@@ -1032,7 +1035,8 @@ function ChatMessageInner({ message, onEdit, onDelete, onVariant, onRegenerateMe
                     key={group.filename}
                     onClick={() => setOpenSource(active ? null : i)}
                     title="Click to view the source text"
-                    className={`fx-press inline-flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1 border transition-colors ${
+                    data-active={active ? 'true' : 'false'}
+                    className={`fx-press fx-capsule inline-flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1 border transition-colors ${
                       active
                         ? 'bg-[var(--fill-hover)] border-[color-mix(in_srgb,var(--accent)_45%,transparent)] text-[var(--ink)] shadow-[0_0_18px_-8px_color-mix(in_srgb,var(--accent)_70%,transparent)]'
                         : 'text-[var(--ink-3)] bg-[var(--fill)] border-[var(--line)] hover:bg-[var(--fill-hover)] hover:text-[var(--ink-2)] hover:border-[var(--line-strong)]'

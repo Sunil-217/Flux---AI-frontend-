@@ -9,7 +9,8 @@ import {
   JetBrains_Mono,
 } from 'next/font/google';
 import './globals.css';
-import './futuristic.css'; // the 2070 layer — built on the tokens globals.css defines
+import './fx.css'; // Intelligence Interface 2070 — tokens, environments, spatial surfaces
+import { FX_BOOT_SCRIPT } from '@/lib/fx/prefs';
 import 'highlight.js/styles/github-dark.css'; // syntax highlighting for code blocks
 import 'katex/dist/katex.min.css'; // LaTeX math rendering
 
@@ -81,6 +82,8 @@ export default function RootLayout({
     >
       <body className="h-full">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Visual-experience prefs (core, environment, motion, glow) — before paint. */}
+        <script dangerouslySetInnerHTML={{ __html: FX_BOOT_SCRIPT }} />
         {children}
       </body>
     </html>

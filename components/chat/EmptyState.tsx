@@ -34,9 +34,10 @@ interface Props {
 
 /* Capability-hinting starters shown in an empty chat — each drops a prompt
    stub into the composer so a new user always has an obvious first move. */
-const STARTERS: { label: string; text: string; icon: ReactNode }[] = [
+const STARTERS: { label: string; text: string; hint: string; icon: ReactNode }[] = [
   {
     label: 'Summarize a document',
+    hint: 'Key points from attached sources',
     text: 'Summarize the key points of this document: ',
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 4H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
@@ -44,6 +45,7 @@ const STARTERS: { label: string; text: string; icon: ReactNode }[] = [
   },
   {
     label: 'Research a topic',
+    hint: 'Cited answers from the live web',
     text: 'Research the latest developments in ',
     icon: (
       <>
@@ -54,6 +56,7 @@ const STARTERS: { label: string; text: string; icon: ReactNode }[] = [
   },
   {
     label: 'Write code',
+    hint: 'Clean, working implementations',
     text: 'Write clean, working code that ',
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -61,6 +64,7 @@ const STARTERS: { label: string; text: string; icon: ReactNode }[] = [
   },
   {
     label: 'Explain simply',
+    hint: 'Plain-language explanations',
     text: 'Explain this in simple terms: ',
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M7 14a5 5 0 119 0c0 2-2 2.5-2 4H9c0-1.5-2-2-2-4z" />
@@ -184,68 +188,66 @@ export function EmptyState({
   // ── New user (or no history): simple welcome ──
   if (!isReturning) {
     return (
-      <div className="relative home-stagger flex flex-col items-center justify-center h-full px-6 text-center select-none overflow-hidden">
-        {/* The core sits behind the wordmark rather than replacing it — the
-            brand stays the brand. `idle` is truthful: this screen only exists
-            when nothing is running. */}
-        <div className="relative mb-7 grid place-items-center">
-          <div className="absolute inset-0 grid place-items-center" aria-hidden>
-            <AICore state="idle" size={isMobile ? 190 : 300} className="opacity-80" />
+      <div className="relative h-full select-none overflow-y-auto overflow-x-hidden">
+        {/* The command surface. Copy and modules on the left, the core on the
+            right at true depth — two columns from md up so the object never sits
+            on top of the headline (the complaint with the old layout). Phones get
+            a small core above the copy. `idle` is truthful: this screen only
+            exists when nothing is running. */}
+        <div className="mx-auto grid min-h-full w-full max-w-5xl items-center gap-6 px-5 py-8 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto] md:gap-14 md:px-12">
+          <div className="fx-seq order-2 text-left md:order-1">
+            <p className="fx-label mb-4">Flux Intelligence Core</p>
+            <h2 className="fx-display text-[2rem] leading-[1.05] sm:text-[2.6rem] md:text-[3rem] xl:text-[3.4rem]">
+              {hasSession ? t('How can I help you think?') : 'Welcome to Close AI'}
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--ink-3)] sm:text-[15px]">
+              {uploadedFile ? (
+                <>
+                  <span className="font-medium text-[var(--accent-fg)]">{uploadedFile}</span> is in
+                  this session&apos;s knowledge. Ask anything about it.
+                </>
+              ) : (
+                <>
+                  Attach sources, run cited research, or just ask — each session builds its own
+                  knowledge, and what matters is remembered across sessions.
+                </>
+              )}
+            </p>
+
+            {!hasSession && (
+              <button
+                onClick={onNewChat}
+                className="fx-press mt-7 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_-12px_var(--fx-halo-strong)] transition-colors hover:bg-[var(--accent-strong)]"
+              >
+                Start a new chat
+              </button>
+            )}
+
+            {/* Command modules — the app's real capabilities, one per starter.
+                Each drops a stub into the composer; the number is an index, not
+                a metric. */}
+            {hasSession && onPickPrompt && (
+              <div className="mt-7 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+                {STARTERS.map((s, i) => (
+                  <button key={s.label} type="button" onClick={() => onPickPrompt(s.text)} className="fx-module">
+                    <span className="fx-module__icon" aria-hidden>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                        {s.icon}
+                      </svg>
+                    </span>
+                    <span className="fx-module__title">{s.label}</span>
+                    <span className="fx-module__hint">{s.hint}</span>
+                    <span className="fx-label fx-module__idx tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="relative">
-            <Logo size={68} />
+
+          <div className="order-1 flex justify-center md:order-2 md:justify-end" aria-hidden>
+            <AICore state="idle" size={isMobile ? 160 : 340} />
           </div>
         </div>
-        <p className="fx-label mb-3">Close AI · Document Intelligence</p>
-        <h2 className="fx-display text-3xl sm:text-[2.6rem] mb-3">
-          {hasSession ? t('What are we working on?') : 'Welcome to Close AI'}
-        </h2>
-        <p className="text-sm text-[var(--ink-3)] mb-8 max-w-md leading-relaxed">
-          {uploadedFile ? (
-            <>
-              <span className="text-[var(--accent-fg)] font-medium">{uploadedFile}</span> is in
-              this session&apos;s knowledge. Ask anything about it.
-            </>
-          ) : (
-            <>
-              Attach sources, run cited research, or just ask — each session builds its own
-              knowledge, and what matters is remembered across sessions.
-            </>
-          )}
-        </p>
-        {!hasSession && (
-          <button
-            onClick={onNewChat}
-            className="fx-press px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent-strong)] text-sm font-semibold text-white rounded-xl transition-colors shadow-[0_8px_24px_-10px_color-mix(in_srgb,var(--accent)_60%,transparent)]"
-          >
-            Start a new chat
-          </button>
-        )}
-
-        {/* Starter prompts — only when a chat is open & ready for input. Each
-            drops a stub into the composer so the first move is always obvious. */}
-        {hasSession && onPickPrompt && (
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 max-w-xl">
-            {STARTERS.map((s) => (
-              <button
-                key={s.label}
-                onClick={() => onPickPrompt(s.text)}
-                className="group inline-flex items-center gap-2 text-[13px] text-[var(--ink-2)] hover:text-[var(--ink)] border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--fill)]/50 hover:bg-[var(--fill)] rounded-full px-4 py-2.5 hover-lift hover:shadow-[0_12px_30px_-14px_rgba(0,0,0,0.7)] active:translate-y-0"
-              >
-                <svg
-                  className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-fg)] transition-transform duration-200 group-hover:scale-110"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  viewBox="0 0 24 24"
-                >
-                  {s.icon}
-                </svg>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     );
   }
@@ -255,9 +257,10 @@ export function EmptyState({
     <div className="relative h-full overflow-y-auto select-none">
       <div className="brand-glyph" aria-hidden />
       <div className="relative max-w-2xl mx-auto w-full px-6 py-10">
+        <p className="fx-label mb-3">Flux Intelligence Core</p>
         <div className="flex items-center gap-3 mb-1">
           <Logo size={34} />
-          <h2 className="text-2xl font-display font-medium tracking-tight text-[var(--ink)]">
+          <h2 className="fx-display text-[1.9rem] sm:text-[2.2rem]">
             {t('What are we working on?')}
           </h2>
         </div>

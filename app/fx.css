@@ -1,0 +1,767 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   FLUX AI — INTELLIGENCE INTERFACE 2070
+   The visual system. Loaded after globals.css and built from its tokens.
+
+   Three ideas hold it together:
+
+   1. ONE SET OF TOKENS. Every surface, edge, glow, radius, shadow and timing
+      below is a --fx-* variable, with a .light block that re-derives them for
+      pale backgrounds. The 64 app templates and the accent picker write
+      --accent / --panel / --ink*; this layer reads those and never fights them.
+
+   2. THE USER TUNES IT. lib/fx/prefs writes data-fx-* attributes and four
+      variables (--fx-glow, --fx-depth, --fx-motion, --fx-speed) onto <html>
+      before first paint. Everything ambient multiplies by them. A slider in
+      Settings therefore changes the page — there is no decorative control.
+
+   3. DEPTH IS THE LANGUAGE. Layer 0 atmosphere → 1 environment → 2 workspace
+      → 3 floating panels → 4 the intelligence core → 5 controls. Premium comes
+      from hierarchy and restraint, not from more light.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tokens ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Tunables — defaults match lib/fx/prefs DEFAULT_FX; the boot script sets the
+     user's own values before paint. */
+  --fx-glow: 0.6;
+  --fx-depth: 0.6;
+  --fx-motion: 1;
+  --fx-speed: 1;
+
+  /* Timing. Every duration is (base × --fx-speed) so one preference retunes
+     the whole interface. Easing is one spring-ish curve, used everywhere. */
+  --fx-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fx-t-fast: calc(0.16s * var(--fx-speed));
+  --fx-t: calc(0.34s * var(--fx-speed));
+  --fx-t-slow: calc(0.62s * var(--fx-speed));
+
+  /* Radii */
+  --fx-r-sm: 10px;
+  --fx-r: 16px;
+  --fx-r-lg: 22px;
+  --fx-r-xl: 28px;
+
+  /* Edge — the machined hairline that makes a panel read as hardware. */
+  --fx-edge: color-mix(in srgb, var(--accent) calc(42% * var(--fx-glow) + 10%), transparent);
+  --fx-edge-soft: color-mix(in srgb, var(--accent) calc(18% * var(--fx-glow) + 6%), transparent);
+  --fx-edge-neutral: color-mix(in srgb, var(--ink) 10%, transparent);
+
+  /* Glow — bleed under objects and behind active elements. */
+  --fx-halo: color-mix(in srgb, var(--accent) calc(28% * var(--fx-glow)), transparent);
+  --fx-halo-strong: color-mix(in srgb, var(--accent) calc(60% * var(--fx-glow) + 8%), transparent);
+
+  /* Surfaces */
+  --fx-glass: var(--panel);
+  --fx-glass-sheen: color-mix(in srgb, var(--ink) 5%, transparent);
+  --fx-glass-blur: 18px;
+
+  /* Depth shadows. Dark rooms cast dark shadows. */
+  --fx-shadow-1: 0 1px 0 0 color-mix(in srgb, var(--ink) 8%, transparent) inset;
+  --fx-shadow-2: 0 24px 60px -28px rgba(0, 0, 0, 0.75);
+  --fx-shadow-3: 0 34px 90px -30px rgba(0, 0, 0, 0.85), 0 0 40px -16px var(--fx-halo);
+
+  /* Environment intensities (per-preset blocks override) */
+  --fx-env-wash: calc(0.12 * var(--fx-glow) + 0.02);
+  --fx-env-grid: 0.07;
+  --fx-env-grid-size: 58px;
+
+  /* The technical voice */
+  --fx-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --fx-display: var(--app-display-font, var(--font-space-grotesk)), var(--font-geist-sans), sans-serif;
+}
+
+/* Pale backgrounds: accent glows read as smears, additive light reads as mud.
+   Everything is pulled back, edges go neutral-first, shadows soften. */
+.light {
+  --fx-edge: color-mix(in srgb, var(--accent) calc(30% * var(--fx-glow) + 8%), transparent);
+  --fx-edge-soft: color-mix(in srgb, var(--accent) calc(12% * var(--fx-glow) + 4%), transparent);
+  --fx-halo: color-mix(in srgb, var(--accent) calc(14% * var(--fx-glow)), transparent);
+  --fx-halo-strong: color-mix(in srgb, var(--accent) calc(34% * var(--fx-glow) + 6%), transparent);
+  --fx-glass-sheen: rgba(255, 255, 255, 0.55);
+  --fx-shadow-1: 0 1px 0 0 rgba(255, 255, 255, 0.7) inset;
+  --fx-shadow-2: 0 18px 50px -26px rgba(30, 24, 14, 0.28);
+  --fx-shadow-3: 0 28px 70px -30px rgba(30, 24, 14, 0.32), 0 0 34px -18px var(--fx-halo);
+  --fx-env-wash: calc(0.07 * var(--fx-glow) + 0.01);
+  --fx-env-grid: 0.055;
+}
+
+[data-fx-contrast="on"] {
+  --fx-edge-neutral: color-mix(in srgb, var(--ink) 22%, transparent);
+  --fx-env-grid: 0.11;
+}
+[data-fx-contrast="on"] .fx-glass,
+[data-fx-contrast="on"] .fx-console,
+[data-fx-contrast="on"] .fx-rail-nav {
+  --line: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+/* ── Layer 0 + 1: the room ──────────────────────────────────────────────── */
+
+.fx-env {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+/* Volumetric wash — two slow masses. Alpha stays low: the eye should read
+   depth, not colour. */
+.fx-env__wash {
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(38rem 30rem at 22% 18%,
+      color-mix(in srgb, var(--accent) calc(var(--fx-env-wash) * 100%), transparent), transparent 62%),
+    radial-gradient(46rem 34rem at 82% 74%,
+      color-mix(in srgb, var(--accent) calc(var(--fx-env-wash) * 70%), transparent), transparent 60%);
+  filter: blur(28px);
+  animation: fx-drift calc(44s / max(var(--fx-motion), 0.01)) ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Perspective floor grid. Masked so it fades before it reaches content. */
+.fx-env__grid {
+  position: absolute;
+  left: -50%;
+  right: -50%;
+  bottom: -46%;
+  height: 92%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--ink) calc(var(--fx-env-grid) * 100%), transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ink) calc(var(--fx-env-grid) * 100%), transparent) 1px, transparent 1px);
+  background-size: var(--fx-env-grid-size) var(--fx-env-grid-size);
+  transform: perspective(46rem) rotateX(74deg);
+  transform-origin: 50% 100%;
+  mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  -webkit-mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  opacity: 0.55;
+  animation: fx-grid-run calc(26s / max(var(--fx-motion), 0.01)) linear infinite;
+  will-change: background-position;
+}
+
+/* One horizon rule. */
+.fx-env__horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) calc(26% * var(--fx-glow) + 6%), transparent) 32%,
+    color-mix(in srgb, var(--accent) calc(40% * var(--fx-glow) + 8%), transparent) 50%,
+    color-mix(in srgb, var(--accent) calc(26% * var(--fx-glow) + 6%), transparent) 68%,
+    transparent);
+  opacity: 0.45;
+}
+
+/* Star field — used by deep-space. Three layered radial dots at prime-ish
+   sizes so the pattern never visibly repeats. */
+.fx-env__stars {
+  position: absolute;
+  inset: -10%;
+  opacity: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, color-mix(in srgb, var(--ink) 55%, transparent), transparent 100%),
+    radial-gradient(1px 1px at 70% 60%, color-mix(in srgb, var(--ink) 40%, transparent), transparent 100%),
+    radial-gradient(1.5px 1.5px at 45% 80%, color-mix(in srgb, var(--accent) 60%, transparent), transparent 100%),
+    radial-gradient(1px 1px at 85% 15%, color-mix(in srgb, var(--ink) 45%, transparent), transparent 100%),
+    radial-gradient(1px 1px at 10% 70%, color-mix(in srgb, var(--ink) 35%, transparent), transparent 100%);
+  background-size: 331px 331px, 421px 421px, 547px 547px, 389px 389px, 463px 463px;
+  animation: fx-stars calc(120s / max(var(--fx-motion), 0.01)) linear infinite;
+}
+
+/* Digital rain — vertical streams via repeating gradients on two layers. */
+.fx-env__rain {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background-image:
+    repeating-linear-gradient(90deg,
+      transparent 0 44px,
+      color-mix(in srgb, var(--accent) calc(16% * var(--fx-glow) + 4%), transparent) 44px 45px,
+      transparent 45px 118px),
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 10%, transparent) 40%, transparent 80%);
+  background-size: 118px 100%, 100% 60%;
+  mask-image: repeating-linear-gradient(180deg, transparent 0 8px, #000 8px 26px, transparent 26px 70px);
+  -webkit-mask-image: repeating-linear-gradient(180deg, transparent 0 8px, #000 8px 26px, transparent 26px 70px);
+  animation: fx-rain calc(9s / max(var(--fx-motion), 0.01)) linear infinite;
+}
+
+/* Aurora — curtains along the top. */
+.fx-env__aurora {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: -22%;
+  height: 58%;
+  opacity: 0;
+  background:
+    radial-gradient(60% 50% at 30% 40%, color-mix(in srgb, var(--accent) calc(28% * var(--fx-glow) + 4%), transparent), transparent 70%),
+    radial-gradient(50% 60% at 70% 30%, color-mix(in srgb, var(--accent) calc(18% * var(--fx-glow) + 2%), transparent), transparent 70%);
+  filter: blur(34px);
+  animation: fx-aurora calc(28s / max(var(--fx-motion), 0.01)) ease-in-out infinite alternate;
+}
+
+/* Gravitational lens — dark-matter's single feature. */
+.fx-env__lens {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 60vmin;
+  height: 60vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(circle,
+    transparent 44%,
+    color-mix(in srgb, var(--accent) calc(10% * var(--fx-glow) + 2%), transparent) 52%,
+    transparent 60%);
+  animation: fx-lens calc(40s / max(var(--fx-motion), 0.01)) ease-in-out infinite alternate;
+}
+
+/* ── Environment presets ── each changes which layers exist and how. */
+
+[data-fx-env="holo-lab"] {
+  --fx-env-grid: 0.11;
+  --fx-env-grid-size: 26px;
+  --fx-env-wash: calc(0.06 * var(--fx-glow) + 0.02);
+}
+[data-fx-env="holo-lab"] .fx-env__grid {
+  transform: none;
+  inset: 0;
+  height: auto;
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 20%, transparent 80%);
+  opacity: 0.5;
+  animation: none;
+}
+
+[data-fx-env="quantum-grid"] {
+  --fx-env-grid: 0.13;
+  --fx-env-grid-size: 40px;
+}
+[data-fx-env="quantum-grid"] .fx-env__grid {
+  transform: perspective(60rem) rotateX(58deg) rotateZ(45deg) scale(1.6);
+  bottom: -60%;
+  height: 140%;
+  mask-image: linear-gradient(to top, #000 10%, transparent 75%);
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 75%);
+}
+
+[data-fx-env="deep-space"] .fx-env__grid { display: none; }
+[data-fx-env="deep-space"] .fx-env__stars { opacity: 0.9; }
+[data-fx-env="deep-space"] { --fx-env-wash: calc(0.05 * var(--fx-glow) + 0.01); }
+
+[data-fx-env="digital-rain"] .fx-env__grid { display: none; }
+[data-fx-env="digital-rain"] .fx-env__rain { opacity: 0.55; }
+
+[data-fx-env="aurora"] .fx-env__grid { opacity: 0.3; animation: none; }
+[data-fx-env="aurora"] .fx-env__aurora { opacity: 0.9; }
+[data-fx-env="aurora"] .fx-env__horizon { top: 62%; }
+
+[data-fx-env="minimal"] .fx-env__grid,
+[data-fx-env="minimal"] .fx-env__wash { display: none; }
+[data-fx-env="minimal"] .fx-env__horizon { opacity: 0.7; }
+
+[data-fx-env="dark-matter"] .fx-env__grid { display: none; }
+[data-fx-env="dark-matter"] { --fx-env-wash: calc(0.03 * var(--fx-glow)); }
+[data-fx-env="dark-matter"] .fx-env__lens { opacity: 1; }
+[data-fx-env="dark-matter"] .fx-env__horizon { opacity: 0.2; }
+
+@keyframes fx-drift  { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 2%, 0) scale(1.06); } }
+@keyframes fx-grid-run { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--fx-env-grid-size), 0 var(--fx-env-grid-size); } }
+@keyframes fx-stars  { to { transform: translate3d(-2%, -3%, 0); } }
+@keyframes fx-rain   { to { background-position: 0 100%, 0 200%; } }
+@keyframes fx-aurora { from { transform: translateX(-3%) skewX(-4deg); } to { transform: translateX(3%) skewX(3deg); } }
+@keyframes fx-lens   { from { transform: translate(-50%, -50%) scale(0.96); } to { transform: translate(-50%, -50%) scale(1.06); } }
+
+/* ── Layer 2: workspace shell ──────────────────────────────────────────── */
+
+.fx-shell {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+/* Spatial header — reads as an instrument strip, not a toolbar. */
+.fx-header {
+  position: relative;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, transparent), color-mix(in srgb, var(--panel) 40%, transparent));
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border-bottom: 1px solid var(--fx-edge-neutral);
+}
+.fx-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fx-edge) 40%, var(--fx-edge) 60%, transparent);
+  opacity: 0.8;
+}
+
+/* ── Layer 3: floating panels ──────────────────────────────────────────── */
+
+.fx-glass {
+  position: relative;
+  background:
+    linear-gradient(160deg, var(--fx-glass-sheen), transparent 42%),
+    var(--fx-glass);
+  backdrop-filter: blur(var(--fx-glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--fx-glass-blur)) saturate(1.2);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--fx-r);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-2), 0 0 0 1px var(--fx-edge-neutral);
+}
+/* Machined edge — a gradient ring, 1px at any radius, following the accent. */
+.fx-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, var(--fx-edge), transparent 32%, transparent 68%, var(--fx-edge-soft));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+.fx-glass--lg { border-radius: var(--fx-r-lg); }
+.fx-glass--xl { border-radius: var(--fx-r-xl); box-shadow: var(--fx-shadow-1), var(--fx-shadow-3), 0 0 0 1px var(--fx-edge-neutral); }
+
+/* Backwards-compatible alias for the previous class name (same rules as .fx-glass). */
+.fx-holo {
+  position: relative;
+  background: linear-gradient(160deg, var(--fx-glass-sheen), transparent 42%), var(--fx-glass);
+  backdrop-filter: blur(var(--fx-glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--fx-glass-blur)) saturate(1.2);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--fx-r);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-2), 0 0 0 1px var(--fx-edge-neutral);
+}
+.fx-holo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, var(--fx-edge), transparent 32%, transparent 68%, var(--fx-edge-soft));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* Energy border — travelling highlight for things ACTIVE right now. */
+.fx-energy::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--fx-angle, 0deg),
+    transparent 0deg, var(--fx-halo-strong) 26deg, transparent 62deg, transparent 360deg);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  animation: fx-spin calc(2.6s * var(--fx-speed)) linear infinite;
+  pointer-events: none;
+}
+@property --fx-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes fx-spin { to { --fx-angle: 360deg; } }
+@supports not (background: conic-gradient(from var(--fx-angle, 0deg), red, blue)) {
+  .fx-energy::after {
+    background: linear-gradient(120deg, var(--fx-halo-strong), transparent 60%);
+    animation: fx-breathe calc(2.4s * var(--fx-speed)) ease-in-out infinite;
+  }
+}
+@keyframes fx-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.9; } }
+
+/* Scan — one slow pass while something is genuinely being read. */
+.fx-scan { position: relative; overflow: hidden; }
+.fx-scan::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 34%;
+  top: -34%;
+  background: linear-gradient(180deg, transparent, var(--fx-halo) 46%, var(--fx-halo-strong) 52%, transparent);
+  animation: fx-sweep calc(2.1s * var(--fx-speed)) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  pointer-events: none;
+}
+@keyframes fx-sweep { 0% { top: -34%; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+
+/* Data stream — a hairline that fills; indeterminate when no % exists. */
+.fx-stream { position: relative; height: 1px; background: var(--line); overflow: hidden; border-radius: 1px; }
+.fx-stream > i {
+  position: absolute; inset: 0 auto 0 0; display: block;
+  background: linear-gradient(90deg, transparent, var(--fx-halo-strong), var(--accent));
+  box-shadow: 0 0 10px 0 var(--fx-halo-strong);
+  transition: width var(--fx-t-slow) var(--fx-ease);
+}
+.fx-stream[data-indeterminate="true"] > i { width: 34%; animation: fx-indeterminate calc(1.5s * var(--fx-speed)) cubic-bezier(0.6, 0, 0.4, 1) infinite; }
+@keyframes fx-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+
+.fx-display {
+  font-family: var(--fx-display);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  background: linear-gradient(178deg, var(--ink) 8%, color-mix(in srgb, var(--ink) 62%, transparent) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-wrap: balance;
+}
+.fx-label {
+  font-family: var(--fx-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.fx-label--accent { color: var(--accent-fg); }
+
+/* ── Interaction (Layer 5) ─────────────────────────────────────────────── */
+
+.fx-lift { transition: transform var(--fx-t) var(--fx-ease), box-shadow var(--fx-t) ease, border-color var(--fx-t-fast) ease; will-change: transform; }
+[data-fx-hover="on"] .fx-lift:hover {
+  transform: translateY(calc(-3px * var(--fx-depth) - 1px));
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-3);
+}
+
+.fx-sheen { position: relative; isolation: isolate; }
+.fx-sheen::after {
+  content: "";
+  position: absolute; inset: 0; border-radius: inherit;
+  background: radial-gradient(22rem 22rem at calc(var(--fx-lx, 0.5) * 100%) calc(var(--fx-ly, 0.5) * 100%), var(--fx-halo), transparent 60%);
+  opacity: 0; transition: opacity var(--fx-t) ease; pointer-events: none; z-index: -1;
+}
+[data-fx-hover="on"] .fx-sheen:hover::after { opacity: 1; }
+
+.fx-press { transition: transform var(--fx-t-fast) var(--fx-ease), filter var(--fx-t-fast) ease; }
+.fx-press:active { transform: scale(0.975); }
+[data-fx-hover="on"] .fx-press:hover { filter: brightness(1.06); }
+
+/* ── Reveal ─────────────────────────────────────────────────────────────── */
+
+@keyframes fx-materialise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: blur(0px); }
+}
+.fx-in { animation: fx-materialise var(--fx-t-slow) var(--fx-ease) both; }
+.fx-seq > * { animation: fx-materialise var(--fx-t-slow) var(--fx-ease) both; }
+.fx-seq > *:nth-child(1) { animation-delay: calc(0.04s * var(--fx-speed)); }
+.fx-seq > *:nth-child(2) { animation-delay: calc(0.11s * var(--fx-speed)); }
+.fx-seq > *:nth-child(3) { animation-delay: calc(0.18s * var(--fx-speed)); }
+.fx-seq > *:nth-child(4) { animation-delay: calc(0.25s * var(--fx-speed)); }
+.fx-seq > *:nth-child(5) { animation-delay: calc(0.32s * var(--fx-speed)); }
+.fx-seq > *:nth-child(6) { animation-delay: calc(0.39s * var(--fx-speed)); }
+.fx-seq > *:nth-child(7) { animation-delay: calc(0.46s * var(--fx-speed)); }
+.fx-seq > *:nth-child(8) { animation-delay: calc(0.53s * var(--fx-speed)); }
+
+/* ── Layer 4: the intelligence core ────────────────────────────────────── */
+
+.fx-core { position: relative; display: grid; place-items: center; isolation: isolate; }
+.fx-core__canvas { width: 100%; height: 100%; display: block; }
+
+/* Ambient bleed. Scaled by --fx-glow and much smaller than before — the old
+   42%-opacity 30px-blur disc is exactly what read as a "green blob" on a pale
+   template. On .light it is nearly invisible by design; the object itself
+   carries the presence there. */
+.fx-core::before {
+  content: "";
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--fx-halo), transparent 58%);
+  filter: blur(22px);
+  opacity: calc(0.55 * var(--fx-glow));
+  z-index: -1;
+  transition: opacity var(--fx-t-slow) ease, transform var(--fx-t-slow) ease;
+}
+.light .fx-core::before { opacity: calc(0.08 * var(--fx-glow)); }
+.fx-core--thinking::before   { transform: scale(1.04); }
+.fx-core--generating::before { opacity: calc(0.8 * var(--fx-glow)); transform: scale(1.08); }
+.fx-core--searching::before  { transform: scale(1.1); }
+.fx-core--error::before      { opacity: calc(0.25 * var(--fx-glow)); transform: scale(0.96); }
+.light .fx-core--generating::before { opacity: calc(0.16 * var(--fx-glow)); }
+
+/* CSS core — the base component; WebGL is layered over it. */
+.fx-core__css { position: relative; width: 78%; aspect-ratio: 1; display: grid; place-items: center; transform-style: preserve-3d; }
+.fx-core__ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 22px -6px var(--fx-halo-strong);
+}
+.fx-core__ring--1 { animation: fx-ring-a calc(14s / max(var(--fx-motion), 0.01)) linear infinite; }
+.fx-core__ring--2 { inset: 12%; border-color: color-mix(in srgb, var(--accent) 26%, transparent); animation: fx-ring-b calc(19s / max(var(--fx-motion), 0.01)) linear infinite; }
+.fx-core__ring--3 { inset: 24%; border-color: color-mix(in srgb, var(--ink) 16%, transparent); animation: fx-ring-c calc(24s / max(var(--fx-motion), 0.01)) linear infinite; }
+.fx-core__nucleus {
+  width: 30%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%,
+    color-mix(in srgb, var(--accent) 88%, white 14%),
+    color-mix(in srgb, var(--accent) 60%, transparent) 55%, transparent 72%);
+  box-shadow: 0 0 36px -6px var(--fx-halo-strong);
+  animation: fx-nucleus calc(4.2s / max(var(--fx-motion), 0.01)) ease-in-out infinite;
+}
+.light .fx-core__nucleus {
+  background: radial-gradient(circle at 36% 32%,
+    color-mix(in srgb, var(--accent) 80%, black 10%),
+    color-mix(in srgb, var(--accent) 45%, transparent) 55%, transparent 72%);
+}
+@keyframes fx-ring-a { to { transform: rotateX(68deg) rotateZ(360deg); } }
+@keyframes fx-ring-b { to { transform: rotateY(70deg) rotateZ(-360deg); } }
+@keyframes fx-ring-c { to { transform: rotateX(28deg) rotateY(46deg) rotateZ(360deg); } }
+@keyframes fx-nucleus { 0%, 100% { transform: scale(1); opacity: 0.92; } 50% { transform: scale(1.06); opacity: 1; } }
+.fx-core[data-webgl="on"] .fx-core__css { display: none; }
+[data-fx-webgl="off"] .fx-core__canvas { display: none; }
+
+/* ── Agent network ──────────────────────────────────────────────────────── */
+
+.fx-net { padding: 2px 0 0; }
+.fx-net__svg { width: 100%; height: auto; overflow: visible; }
+.fx-net__link { stroke: color-mix(in srgb, var(--ink) 12%, transparent); stroke-width: 1; transition: stroke var(--fx-t) ease, stroke-width var(--fx-t) ease; }
+.fx-net__link[data-state="done"] { stroke: color-mix(in srgb, var(--accent) 34%, transparent); }
+.fx-net__link[data-state="flow"] { stroke: var(--fx-halo-strong); stroke-width: 1.6; stroke-dasharray: 5 7; animation: fx-net-flow calc(0.85s * var(--fx-speed)) linear infinite; }
+@keyframes fx-net-flow { to { stroke-dashoffset: -12; } }
+.fx-net__halo { fill: var(--fx-halo); opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity var(--fx-t) ease; }
+.fx-net__node[data-state="active"] .fx-net__halo { opacity: 1; animation: fx-net-halo calc(1.7s * var(--fx-speed)) ease-in-out infinite; }
+@keyframes fx-net-halo { 0%, 100% { opacity: 0.35; transform: scale(0.82); } 50% { opacity: 0.9; transform: scale(1.12); } }
+.fx-net__dot { fill: var(--base); stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1.2; transition: fill var(--fx-t) ease, stroke var(--fx-t) ease; }
+.fx-net__node[data-state="done"] .fx-net__dot { fill: color-mix(in srgb, var(--accent) 55%, transparent); stroke: color-mix(in srgb, var(--accent) 80%, transparent); }
+.fx-net__node[data-state="active"] .fx-net__dot { fill: var(--accent); stroke: color-mix(in srgb, var(--accent) 100%, white 25%); stroke-width: 1.6; }
+.fx-net__node[data-state="error"] .fx-net__dot { fill: color-mix(in srgb, #f87171 70%, var(--base)); stroke: #f87171; }
+.fx-net__label { fill: var(--ink-4); font-family: var(--fx-mono); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; text-anchor: middle; transition: fill var(--fx-t) ease; }
+.fx-net__node[data-state="done"] .fx-net__label { fill: var(--ink-3); }
+.fx-net__node[data-state="active"] .fx-net__label { fill: var(--ink); }
+.fx-net[data-idle="true"] .fx-net__svg { opacity: 0.45; }
+.fx-net__status { margin-top: 2px; font-family: var(--fx-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-4); text-align: center; }
+.fx-net[data-idle="false"] .fx-net__status { color: var(--accent-fg); }
+
+/* ── Document scanner ───────────────────────────────────────────────────── */
+
+.fx-scanner {
+  position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%);
+  z-index: 20; width: min(340px, calc(100vw - 32px)); padding: 12px 14px;
+  animation: fx-materialise var(--fx-t) var(--fx-ease) both; pointer-events: none;
+}
+.fx-scanner__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fx-scanner[data-failed="true"] .fx-scanner__head .fx-label { color: #f87171; }
+.fx-scanner__queue { color: var(--accent-fg); }
+.fx-scanner__name { margin-top: 5px; font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-scanner__steps { display: flex; align-items: center; gap: 14px; margin: 9px 0 0; padding: 0; list-style: none; font-family: var(--fx-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+.fx-scanner__steps li { display: flex; align-items: center; gap: 5px; color: var(--ink-4); transition: color var(--fx-t) ease; }
+.fx-scanner__steps li[data-state="done"] { color: var(--ink-3); }
+.fx-scanner__steps li[data-state="active"] { color: var(--ink); }
+.fx-scanner__pip { width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); transition: background var(--fx-t) ease, box-shadow var(--fx-t) ease; }
+.fx-scanner__steps li[data-state="done"] .fx-scanner__pip { background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.fx-scanner__steps li[data-state="active"] .fx-scanner__pip { background: var(--accent); box-shadow: 0 0 10px 0 var(--fx-halo-strong); }
+.fx-scanner__stream { display: block; margin-top: 10px; }
+.fx-scanner__outcome { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
+.fx-scanner__error { margin-top: 7px; font-size: 11.5px; line-height: 1.5; color: #fca5a5; }
+.light .fx-scanner__error { color: #b91c1c; }
+
+/* ── Command console (composer) ────────────────────────────────────────── */
+
+.fx-console {
+  position: relative;
+  border-radius: var(--fx-r-xl);
+  background: linear-gradient(180deg, var(--fx-glass-sheen), transparent 40%), var(--elevated);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--fx-edge-neutral);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-2);
+  transition: border-color var(--fx-t) ease, box-shadow var(--fx-t) ease, transform var(--fx-t) var(--fx-ease);
+}
+.fx-console:focus-within {
+  border-color: var(--fx-edge);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-3), 0 0 0 1px var(--fx-edge-soft);
+  transform: translateY(calc(-1px * var(--fx-depth)));
+}
+/* While the system is working the console carries the energy border. */
+.fx-console[data-busy="true"]::after {
+  content: "";
+  position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
+  background: conic-gradient(from var(--fx-angle, 0deg), transparent 0deg, var(--fx-halo-strong) 24deg, transparent 58deg, transparent 360deg);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude; -webkit-mask-composite: xor;
+  animation: fx-spin calc(2.2s * var(--fx-speed)) linear infinite;
+  pointer-events: none;
+}
+
+/* ── Navigation rail (sidebar) ─────────────────────────────────────────── */
+
+.fx-rail-nav {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 80%, transparent)) !important;
+  border-right: 1px solid var(--fx-edge-neutral) !important;
+}
+.fx-rail-nav::after {
+  content: "";
+  position: absolute; top: 0; bottom: 0; right: -1px; width: 1px;
+  background: linear-gradient(180deg, transparent, var(--fx-edge) 30%, var(--fx-edge-soft) 70%, transparent);
+  pointer-events: none;
+}
+
+/* Context rail (right) */
+.fx-rail {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), color-mix(in srgb, var(--panel) 80%, transparent)) !important;
+  border-left: 1px solid var(--fx-edge-neutral) !important;
+}
+
+/* ── Chat messages ─────────────────────────────────────────────────────── */
+
+/* Assistant: an energy rail down the left that carries the reply. Static once
+   the message is complete; only a streaming reply's rail moves. */
+.fx-msg-ai { position: relative; padding-left: 14px; }
+.fx-msg-ai::before {
+  content: "";
+  position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--fx-halo-strong), color-mix(in srgb, var(--accent) 12%, transparent));
+  opacity: 0.85;
+}
+.fx-msg-ai[data-streaming="true"]::before {
+  background: linear-gradient(180deg, transparent, var(--accent), transparent);
+  background-size: 100% 200%;
+  animation: fx-rail-flow calc(1.6s * var(--fx-speed)) linear infinite;
+}
+@keyframes fx-rail-flow { from { background-position: 0 100%; } to { background-position: 0 -100%; } }
+
+/* User: compact, distinct, not a balloon. */
+.fx-msg-user {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, var(--bubble)), var(--bubble)) !important;
+  border: 1px solid var(--fx-edge-soft) !important;
+  border-radius: var(--fx-r) var(--fx-r) 6px var(--fx-r) !important;
+}
+
+/* Source capsule */
+.fx-capsule {
+  border-radius: 999px !important;
+  border: 1px solid var(--fx-edge-neutral) !important;
+}
+.fx-capsule[data-active="true"] {
+  border-color: var(--fx-edge) !important;
+  box-shadow: 0 0 18px -8px var(--fx-halo-strong);
+}
+
+/* ── Command modules (empty-state quick actions) ───────────────────────── */
+
+.fx-module {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: 14px 15px 13px;
+  text-align: left;
+  border-radius: var(--fx-r);
+  background: linear-gradient(160deg, var(--fx-glass-sheen), transparent 42%), var(--fx-glass);
+  backdrop-filter: blur(var(--fx-glass-blur));
+  -webkit-backdrop-filter: blur(var(--fx-glass-blur));
+  border: 1px solid var(--fx-edge-neutral);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-2);
+  transition: transform var(--fx-t) var(--fx-ease), border-color var(--fx-t) ease, box-shadow var(--fx-t) ease;
+}
+.fx-module__icon {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  color: var(--accent-fg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid var(--fx-edge-soft);
+}
+.fx-module__title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.fx-module__hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+.fx-module__idx { position: absolute; top: 12px; right: 13px; }
+[data-fx-hover="on"] .fx-module:hover {
+  transform: translateY(calc(-3px * var(--fx-depth) - 1px));
+  border-color: var(--fx-edge);
+  box-shadow: var(--fx-shadow-1), var(--fx-shadow-3);
+}
+.fx-module:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Settings: preset tiles ────────────────────────────────────────────── */
+
+.fx-tile {
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 12px 13px;
+  text-align: left; border-radius: var(--fx-r-sm);
+  background: var(--fill); border: 1px solid var(--line);
+  transition: border-color var(--fx-t-fast) ease, background var(--fx-t-fast) ease, transform var(--fx-t) var(--fx-ease);
+}
+[data-fx-hover="on"] .fx-tile:hover { background: var(--fill-hover); border-color: var(--line-strong); }
+.fx-tile[data-selected="true"] { border-color: var(--fx-edge); background: color-mix(in srgb, var(--accent) 8%, var(--fill)); box-shadow: 0 0 0 1px var(--fx-edge-soft), 0 0 24px -12px var(--fx-halo-strong); }
+.fx-tile__swatch { width: 100%; height: 44px; border-radius: 7px; border: 1px solid var(--fx-edge-neutral); overflow: hidden; position: relative; background: var(--base); }
+.fx-tile__title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.fx-tile__blurb { font-size: 11px; line-height: 1.4; color: var(--ink-3); }
+.fx-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Range input in the accent */
+.fx-range { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) var(--fx-pct, 50%), var(--line-strong) var(--fx-pct, 50%)); outline: none; }
+.fx-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 2px solid var(--base); box-shadow: 0 0 0 1px var(--fx-edge), 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
+.fx-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 2px solid var(--base); cursor: pointer; }
+.fx-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+/* ── Motion off / reduced motion ───────────────────────────────────────── */
+
+[data-fx-motion="off"] .fx-env__wash,
+[data-fx-motion="off"] .fx-env__grid,
+[data-fx-motion="off"] .fx-env__stars,
+[data-fx-motion="off"] .fx-env__rain,
+[data-fx-motion="off"] .fx-env__aurora,
+[data-fx-motion="off"] .fx-env__lens,
+[data-fx-motion="off"] .fx-core__ring,
+[data-fx-motion="off"] .fx-core__nucleus { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-env__wash, .fx-env__grid, .fx-env__stars, .fx-env__rain, .fx-env__aurora, .fx-env__lens,
+  .fx-energy::after, .fx-console[data-busy="true"]::after, .fx-scan::before,
+  .fx-stream[data-indeterminate="true"] > i,
+  .fx-net__link[data-state="flow"], .fx-net__node[data-state="active"] .fx-net__halo,
+  .fx-msg-ai[data-streaming="true"]::before,
+  .fx-core__ring, .fx-core__nucleus { animation: none !important; }
+  .fx-scan::before { display: none; }
+  .fx-in, .fx-seq > *, .fx-scanner { animation: none !important; opacity: 1; transform: none; filter: none; }
+  .fx-lift:hover, .fx-module:hover { transform: none; }
+  .fx-net__node[data-state="active"] .fx-net__halo { opacity: 0.85; }
+  .fx-core__ring--1 { transform: rotateX(68deg); }
+  .fx-core__ring--2 { transform: rotateY(70deg); }
+  .fx-core__ring--3 { transform: rotateX(28deg) rotateY(46deg); }
+}
+
+/* ── Focus survives every effect ────────────────────────────────────────── */
+.fx-glass :focus-visible, .fx-holo :focus-visible, .fx-console :focus-visible,
+.fx-press:focus-visible, .fx-lift:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+
+/* ── Small screens: designed, not shrunk ───────────────────────────────── */
+
+@media (max-width: 767px) {
+  :root { --fx-glass-blur: 10px; }
+  .fx-env__wash { filter: blur(14px); }
+  .fx-env__grid { animation: none; opacity: 0.32; --fx-env-grid-size: 44px; }
+  .fx-env__rain, .fx-env__stars { animation-duration: 40s; }
+  .fx-env__aurora { filter: blur(24px); }
+  [data-fx-hover="on"] .fx-lift:hover, [data-fx-hover="on"] .fx-module:hover { transform: none; box-shadow: var(--fx-shadow-1), var(--fx-shadow-2); }
+  .fx-sheen::after { display: none; }
+  .fx-display { letter-spacing: -0.035em; }
+  .fx-scanner { width: calc(100vw - 24px); padding: 11px 12px; }
+  .fx-console { border-radius: var(--fx-r-lg); }
+  .fx-module { padding: 12px 13px 11px; }
+}
+
+@media (pointer: coarse) {
+  .fx-press:active { transform: scale(0.985); }
+  /* Touch targets: grow the hit area, not the layout. */
+  .fx-touch { min-width: 44px; min-height: 44px; }
+  .fx-touch-text { padding-block: 12px; margin-block: -12px; }
+  .fx-net__svg { max-width: 260px; margin: 0 auto; display: block; }
+}

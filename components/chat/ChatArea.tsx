@@ -318,7 +318,7 @@ export function ChatArea({
       )}
 
       {/* Header */}
-      <header className="relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-16 flex-shrink-0 bg-[var(--panel)] backdrop-blur-md">
+      <header className="fx-header relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-16 flex-shrink-0">
         <button
           onClick={onToggleSidebar}
           className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
@@ -334,7 +334,7 @@ export function ChatArea({
             {session ? session.title : 'Close AI'}
           </h1>
           {session && (
-            <p className="text-[11px] text-[var(--ink-3)] truncate leading-none mt-0.5">
+            <p className="fx-label truncate leading-none mt-1 !tracking-[0.16em]">
               {uploadedFiles.length > 1
                 ? `${uploadedFiles.length} documents · web-connected`
                 : uploadedFile
