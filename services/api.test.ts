@@ -172,12 +172,35 @@ describe('streamQuestion — agent events', () => {
     expect(tokens).toEqual(['final']);
   });
 
-  it('posts to /chat when the agent path is disabled', async () => {
-    // Default configuration: nothing about the request path changes.
+  it('posts a text turn to /agent/task by default', async () => {
+    // /agent/task is a superset: it delegates anything that is not a genuine
+    // multi-step goal back to the ordinary chat stream, so it is safe as the
+    // default path for every message.
     const fetchMock = vi.fn().mockResolvedValue(sseResponse(['data: {"type":"done"}\n\n']));
     vi.stubGlobal('fetch', fetchMock);
     await streamQuestion('c1', 'hi', [], { onToken: () => {} });
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/agent\/task$/);
+  });
+
+  it('sends a vision turn to /chat, never to the agent path', async () => {
+    // A picture is not an agent task, and the orchestrator has no image in its
+    // plan model — routing one there would lose it.
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse(['data: {"type":"done"}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamQuestion('c1', 'what is this', [], { onToken: () => {} },
+      'data:image/png;base64,AAAA');
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/chat$/);
+  });
+
+  it('sends the identical body to whichever endpoint it picks', async () => {
+    // Delegation is only transparent if the payload is the same.
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse(['data: {"type":"done"}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamQuestion('c1', 'hi', [{ role: 'user', content: 'earlier' }], { onToken: () => {} });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.chat_id).toBe('c1');
+    expect(body.question).toBe('hi');
+    expect(body.history).toEqual([{ role: 'user', content: 'earlier' }]);
   });
 
   it('survives a status event with no label', async () => {

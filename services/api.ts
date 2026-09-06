@@ -415,13 +415,18 @@ export interface StreamHandlers {
 /**
  * Route chat through POST /agent/task instead of POST /chat.
  *
- * Off by default. /agent/task is a superset — it delegates anything that is not
- * a genuine multi-step goal straight back to the ordinary chat stream — but
- * "safe by design" is not the same as "measured in production", and this
- * changes the path every message takes. Set NEXT_PUBLIC_AGENT_TASKS=true to
- * enable it; the backend has its own kill switch (AGENT_ORCHESTRATION_ENABLED).
+ * ON by default. /agent/task is a superset of /chat: anything that is not a
+ * genuine multi-step goal — a greeting, a one-shot question, a vision turn, or
+ * any request when planning is unavailable — is delegated straight back to the
+ * ordinary chat stream, with every preference (style, instructions, web toggle,
+ * selected documents, history) passed through unchanged. A complex goal
+ * additionally gets `status` events.
+ *
+ * Two independent kill switches, because this changes the path every message
+ * takes: set NEXT_PUBLIC_AGENT_TASKS=false here, or AGENT_ORCHESTRATION_ENABLED=false
+ * on the backend — either one restores the previous behaviour exactly.
  */
-export const AGENT_TASKS_ENABLED = process.env.NEXT_PUBLIC_AGENT_TASKS === 'true';
+export const AGENT_TASKS_ENABLED = process.env.NEXT_PUBLIC_AGENT_TASKS !== 'false';
 
 // Response-style preferences (set in Settings → Appearance), read at send time.
 export const STYLE_KEY = 'close_ai_style';

@@ -44,6 +44,14 @@ const baseHeaders = [
     value: "camera=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()",
   },
   { key: "X-DNS-Prefetch-Control", value: "on" },
+  // HSTS. Browsers ignore this over plain http, so it is inert in local
+  // development and takes effect on the deployed https origin. No `preload` —
+  // that submits the domain to a browser-baked list which is slow and awkward
+  // to undo, and is a decision for the domain owner rather than a default.
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains",
+  },
 ];
 
 const nextConfig: NextConfig = {
