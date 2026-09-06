@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { VisualSettings } from './VisualSettings';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -52,6 +53,7 @@ import type { FeatureKey } from '@/lib/features';
 type Tab =
   | 'account'
   | 'appearance'
+  | 'visual'
   | 'chat'
   | 'data'
   | 'api'
@@ -906,6 +908,10 @@ const navIcon = (key: Tab) => {
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5" /><circle cx="17.5" cy="10.5" r="1.5" /><circle cx="8.5" cy="7.5" r="1.5" /><circle cx="6.5" cy="12.5" r="1.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 2a10 10 0 100 20c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01a1.5 1.5 0 011.13-2.49H16a6 6 0 006-6c0-5.52-4.48-9-10-9z" /></svg>
     );
+  if (key === 'visual')
+    return (
+      <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 12l8-4.5M12 12v9M12 12L4 7.5" /></svg>
+    );
   if (key === 'chat')
     return (
       <svg className={cls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-9 6l3.5-2H18a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12z" /></svg>
@@ -1280,6 +1286,7 @@ export function SettingsModal({
   const allNav: { key: Tab; label: string }[] = [
     { key: 'account', label: 'Account' },
     { key: 'appearance', label: 'Appearance' },
+    { key: 'visual', label: 'Visual System' },
     { key: 'chat', label: 'Chat' },
     { key: 'data', label: 'Data' },
     { key: 'api', label: 'API Keys' },
@@ -1607,6 +1614,8 @@ export function SettingsModal({
                 )}
               </>
             )}
+
+            {tab === 'visual' && <VisualSettings />}
 
             {tab === 'chat' && (
               <>

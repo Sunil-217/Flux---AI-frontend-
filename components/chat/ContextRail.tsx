@@ -220,7 +220,7 @@ export function ContextRail({
             <span className="absolute inline-flex w-full h-full rounded-full bg-[var(--accent)] opacity-60 animate-ping [animation-duration:2.6s]" />
             <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
           </span>
-          Context
+          <span className="fx-label !tracking-[0.2em] !text-[var(--ink-2)]">Intelligence Context</span>
         </h2>
         <button
           onClick={toggle}

@@ -395,7 +395,8 @@ export function ChatInput({ onSend, disabled, placeholder, isStreaming, onStop, 
         </div>
       )}
       <div
-        className={`rounded-[1.8rem] border bg-[var(--elevated)] backdrop-blur-xl px-2 py-2 shadow-[0_6px_28px_-12px_rgba(0,0,0,0.45)] transition-all duration-200 ${
+        data-busy={isStreaming ? 'true' : 'false'}
+        className={`fx-console px-2 py-2 ${
         disabled
           ? 'border-[var(--line)] opacity-60'
           : listening

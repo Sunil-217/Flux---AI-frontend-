@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { AICore } from '@/components/fx/AICore';
-import { trackLocalPointer } from '@/components/fx/Atmosphere';
+import { trackLocalPointer } from '@/components/fx/Environment';
 import { Logo } from '@/components/layout/Logo';
 import { useAuth } from './AuthProvider';
 import {
@@ -66,7 +66,7 @@ function PasswordField({
           tabIndex={-1}
           onClick={() => setShow((s) => !s)}
           aria-label={show ? 'Hide password' : 'Show password'}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--ink-4)] hover:text-[var(--ink-2)] transition-colors"
+          className="fx-touch absolute right-1 top-1/2 -translate-y-1/2 inline-grid place-items-center p-1 text-[var(--ink-4)] hover:text-[var(--ink-2)] transition-colors"
         >
           {show ? (
             // currently visible → click to hide
@@ -234,73 +234,68 @@ const FEATURES: { icon: ReactNode; title: string; desc: string }[] = [
   },
 ];
 
-function BrandPanel() {
+/**
+ * The full-viewport stage the sign-in card floats over.
+ *
+ * Not a left column and a right column: one composed 100vw × 100vh scene. The
+ * intelligence core sits in the left two-thirds at true depth — translucent,
+ * rim-lit, BEHIND the copy — and the copy is positioned on the horizon line so
+ * the whole viewport reads as one deliberate image rather than a template with
+ * a picture in it. `idle` is the truthful state: nothing runs on a sign-in
+ * screen, and the core never claims otherwise.
+ *
+ * Only rendered at ≥ lg; below that the phone gets its own composition in the
+ * main column with a small core and no WebGL at all.
+ */
+function Stage() {
   return (
-    <aside className="relative hidden lg:flex w-[46%] xl:w-[42%] flex-col justify-between overflow-hidden border-r border-[var(--line)] p-12 xl:p-16">
-      {/* Ambient. The intelligence core sits behind the copy, bled off the left
-          edge — present as an object in the room rather than an illustration
-          placed next to the text. `idle` is the truthful state here: nothing is
-          running on a sign-in screen, and the core never claims otherwise. */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <div className="absolute -left-[18%] top-1/2 -translate-y-1/2 opacity-[0.85]">
-          <AICore state="idle" size={520} />
-        </div>
-        <div className="grain-overlay" />
+    /* Bounded to the left field — it stops where the sign-in column begins, so
+       nothing here can ever slide under the card at any width. */
+    <div className="pointer-events-none absolute inset-y-0 left-0 right-[44%] hidden lg:block" aria-hidden>
+      {/* Layer 1 — the core, low and centred in the field, behind the copy. */}
+      <div className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 opacity-95 xl:scale-110 2xl:scale-125">
+        <AICore state="idle" size={440} />
       </div>
 
-      {/* Wordmark */}
-      <div className="relative flex items-center gap-3">
-        <div style={{ filter: 'drop-shadow(0 8px 16px color-mix(in srgb, var(--accent) 28%, transparent))' }}>
-          <Logo size={34} />
+      {/* Layer 3 — copy at the top, capability modules at the foot. Flexbox
+          keeps them apart at every height instead of guessing percentages. */}
+      {/* Top padding clears the pinned wordmark rather than guessing a
+          percentage that collides at short viewport heights. */}
+      <div className="absolute inset-0 flex flex-col justify-between px-[9%] pt-28 pb-[9%] xl:pt-32">
+        <div className="fx-seq max-w-[34rem]">
+          <p className="fx-label mb-4">Flux Intelligence · Document Intelligence</p>
+          <h2 className="fx-display text-[2.4rem] leading-[1.04] xl:text-[3.2rem] 2xl:text-[4rem]">
+            The next
+            <br />
+            intelligence layer.
+          </h2>
+          <p className="mt-5 max-w-sm text-[14px] leading-relaxed text-[var(--ink-3)] xl:text-[15px]">
+            Upload anything and ask away. Close AI reads, reasons, and cites — so every answer is grounded in your own sources.
+          </p>
         </div>
-        <span className="text-lg font-semibold tracking-tight text-[var(--ink)]">Close AI</span>
-        <span className="fx-label ml-1 pt-[3px]">Fluxera</span>
-      </div>
 
-      {/* Headline + value props */}
-      <div className="relative max-w-md fx-seq">
-        <p className="fx-label mb-5">Document Intelligence</p>
-
-        <h2 className="fx-display text-[2.7rem] xl:text-[3.35rem]">
-          The next
-          <br />
-          intelligence layer.
-        </h2>
-
-        <p className="mt-5 text-[15px] leading-relaxed text-[var(--ink-3)]">
-          Upload anything and ask away. Close AI reads, reasons, and cites — so every answer is grounded in your own sources.
-        </p>
-
-        {/* The same three capabilities, presented as instrument panels. Each is
-            a real feature of the product; nothing here is a metric. */}
-        <ul className="mt-9 space-y-2.5">
+        {/* Real features, numbered as an index — not a metric. The third is
+            held back until there is width for it. */}
+        <ul className="flex gap-2.5">
           {FEATURES.map((f, i) => (
             <li
               key={f.title}
-              className="fx-holo fx-lift fx-sheen flex items-start gap-3.5 p-3.5"
+              className={`fx-glass pointer-events-auto fx-lift fx-sheen w-[12rem] p-3 ${i === 2 ? 'hidden 2xl:block' : ''}`}
               onPointerMove={trackLocalPointer}
             >
-              <FeatureIcon>{f.icon}</FeatureIcon>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--ink)]">{f.title}</p>
-                <p className="mt-0.5 text-[13px] leading-relaxed text-[var(--ink-3)]">{f.desc}</p>
+              <div className="flex items-start justify-between">
+                <FeatureIcon>{f.icon}</FeatureIcon>
+                <span className="fx-label tabular-nums pt-0.5">{String(i + 1).padStart(2, '0')}</span>
               </div>
-              <span className="fx-label ml-auto shrink-0 pt-0.5 tabular-nums">
-                {String(i + 1).padStart(2, '0')}
-              </span>
+              <p className="mt-2.5 text-[12.5px] font-semibold text-[var(--ink)]">{f.title}</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-[var(--ink-3)]">{f.desc}</p>
             </li>
           ))}
         </ul>
       </div>
 
-      {/* Trust line */}
-      <div className="relative flex items-center gap-2 text-xs text-[var(--ink-4)]">
-        <span>Powered by</span>
-        <span className="font-medium text-[var(--accent-fg)]">Fluxera</span>
-        <span aria-hidden>·</span>
-        <span>Enterprise-grade privacy</span>
-      </div>
-    </aside>
+      <div className="grain-overlay" />
+    </div>
   );
 }
 
@@ -500,21 +495,38 @@ export function AuthScreen() {
 
   const btn =
     'btn-shine w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-strong)] hover:shadow-[0_8px_28px_-10px_color-mix(in_srgb,var(--accent)_65%,transparent)] hover:-translate-y-px transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed';
-  const linkCls = 'text-[var(--accent-fg)] font-medium hover:underline';
+  const linkCls = 'fx-touch-text text-[var(--accent-fg)] font-medium hover:underline';
 
   return (
-    <div className="relative flex min-h-screen w-full overflow-hidden text-[var(--ink)]">
-      {/* ── Brand showcase (desktop) ── */}
-      <BrandPanel />
+    <div className="fx-shell relative flex min-h-screen w-full overflow-hidden text-[var(--ink)]">
+      {/* ── The stage: one composed viewport (≥ lg) ── */}
+      <Stage />
 
-      {/* ── Form column ── */}
-      <main className="relative flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
-        {/* Mobile-only ambient (desktop ambient lives in the brand panel). */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden lg:hidden" aria-hidden>
-          <div className="brand-glyph" />
-          <div className="grain-overlay" />
+      {/* Wordmark pinned top-left on every size. */}
+      <div className="absolute left-5 top-5 z-10 flex items-center gap-3 sm:left-8 sm:top-7 lg:left-[7%] lg:top-[7%] xl:left-[9%]">
+        <div style={{ filter: 'drop-shadow(0 8px 16px var(--fx-halo-strong))' }}>
+          <Logo size={32} />
         </div>
+        <span className="text-[17px] font-semibold tracking-tight text-[var(--ink)]">Close AI</span>
+        <span className="fx-label ml-1 pt-[3px]">Fluxera</span>
+      </div>
 
+      {/* Trust line pinned bottom-right on desktop, under the card on phones. */}
+      <div className="absolute bottom-6 right-6 z-10 hidden items-center gap-2 text-xs text-[var(--ink-4)] lg:flex lg:right-[8%]">
+        <span>Powered by</span>
+        <span className="font-medium text-[var(--accent-fg)]">Fluxera</span>
+        <span aria-hidden>·</span>
+        <span>Enterprise-grade privacy</span>
+      </div>
+
+      {/* ── Sign-in column: centred on phones, floated right on the stage ── */}
+      <main className="relative flex flex-1 flex-col items-center justify-center px-5 pt-24 pb-10 sm:px-8 lg:flex-row lg:justify-end lg:px-0 lg:pr-[8%] lg:pt-0 lg:pb-0">
+        {/* Phone / tablet composition: the core sits in the gap between the
+            wordmark and the card, fully visible, instead of hiding behind it.
+            One low-density instance; the desktop stage is not rendered here. */}
+        <div className="mb-6 lg:hidden" aria-hidden>
+          <AICore state="idle" size={132} />
+        </div>
         {/* Card: entrance + cursor-follow 3D tilt + specular highlight. */}
         <div
           ref={cardRef}
@@ -527,13 +539,7 @@ export function AuthScreen() {
             transformStyle: 'preserve-3d',
           }}
         >
-          <div
-            className="relative w-full bg-[var(--panel)] backdrop-blur-xl border border-[var(--line)] rounded-2xl p-8"
-            style={{
-              boxShadow:
-                '0 28px 80px -28px rgba(0,0,0,0.6), 0 10px 32px -14px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 rgba(255,255,255,0.05)',
-            }}
-          >
+          <div className="fx-glass fx-glass--xl relative w-full p-8">
             {/* Specular highlight that follows the cursor */}
             <div
               className="absolute inset-0 rounded-2xl pointer-events-none"
@@ -554,7 +560,7 @@ export function AuthScreen() {
                   <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
                   <PasswordField label="Password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
                   <div className="text-right -mt-1">
-                    <button type="button" onClick={() => setMode('forgot')} className="text-xs text-[var(--ink-3)] hover:text-[var(--accent-fg)]">
+                    <button type="button" onClick={() => setMode('forgot')} className="fx-touch-text text-xs text-[var(--ink-3)] hover:text-[var(--accent-fg)]">
                       Forgot password?
                     </button>
                   </div>
@@ -589,7 +595,7 @@ export function AuthScreen() {
                   </div>
                   <button type="submit" disabled={loading || code.length < 6} className={btn}>{loading ? 'Verifying…' : 'Verify & continue'}</button>
                   <div className="flex items-center justify-between text-sm">
-                    <button type="button" onClick={() => setMode('signup')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">← Back</button>
+                    <button type="button" onClick={() => setMode('signup')} className="fx-touch-text text-[var(--ink-3)] hover:text-[var(--ink)]">← Back</button>
                     <button type="button" onClick={() => resend('otp')} className={linkCls}>Resend code</button>
                   </div>
                 </form>
@@ -600,7 +606,7 @@ export function AuthScreen() {
                   <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" autoFocus />
                   <button type="submit" disabled={loading} className={btn}>{loading ? 'Sending…' : 'Send reset code'}</button>
                   <p className="text-center text-sm">
-                    <button type="button" onClick={() => setMode('signin')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">← Back to sign in</button>
+                    <button type="button" onClick={() => setMode('signin')} className="fx-touch-text text-[var(--ink-3)] hover:text-[var(--ink)]">← Back to sign in</button>
                   </p>
                 </form>
               )}
@@ -614,7 +620,7 @@ export function AuthScreen() {
                   <PasswordField label="New password" required showStrength value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" minLength={8} />
                   <button type="submit" disabled={loading || code.length < 6} className={btn}>{loading ? 'Resetting…' : 'Reset password'}</button>
                   <div className="flex items-center justify-between text-sm">
-                    <button type="button" onClick={() => setMode('signin')} className="text-[var(--ink-3)] hover:text-[var(--ink)]">← Sign in</button>
+                    <button type="button" onClick={() => setMode('signin')} className="fx-touch-text text-[var(--ink-3)] hover:text-[var(--ink)]">← Sign in</button>
                     <button type="button" onClick={() => resend('reset')} className={linkCls}>Resend code</button>
                   </div>
                 </form>
