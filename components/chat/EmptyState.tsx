@@ -194,7 +194,7 @@ export function EmptyState({
             on top of the headline (the complaint with the old layout). Phones get
             a small core above the copy. `idle` is truthful: this screen only
             exists when nothing is running. */}
-        <div className="mx-auto grid min-h-full w-full max-w-5xl items-center gap-6 px-5 py-8 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto] md:gap-14 md:px-12">
+        <div className="mx-auto grid min-h-full w-full max-w-5xl items-center gap-6 px-5 py-8 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto] md:gap-12 md:px-12">
           <div className="fx-seq order-2 text-left md:order-1">
             <p className="fx-label mb-4">Flux Intelligence Core</p>
             <h2 className="fx-display text-[2rem] leading-[1.05] sm:text-[2.6rem] md:text-[3rem] xl:text-[3.4rem]">
@@ -227,7 +227,7 @@ export function EmptyState({
                 Each drops a stub into the composer; the number is an index, not
                 a metric. */}
             {hasSession && onPickPrompt && (
-              <div className="mt-7 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+              <div className="fx-modules mt-7">
                 {STARTERS.map((s, i) => (
                   <button key={s.label} type="button" onClick={() => onPickPrompt(s.text)} className="fx-module">
                     <span className="fx-module__icon" aria-hidden>
@@ -245,7 +245,7 @@ export function EmptyState({
           </div>
 
           <div className="order-1 flex justify-center md:order-2 md:justify-end" aria-hidden>
-            <AICore state="idle" size={isMobile ? 160 : 340} />
+            <AICore state="idle" size={isMobile ? 170 : 300} />
           </div>
         </div>
       </div>
