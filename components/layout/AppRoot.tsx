@@ -1,11 +1,44 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { Environment } from '@/components/fx/Environment';
 import { AppLayout } from './AppLayout';
 import { Logo } from './Logo';
+
+/**
+ * First paint while the stored session is being restored.
+ *
+ * A returning user with a cached identity never sees this — they get the
+ * workspace immediately. It is reached on a first sign-in on this device, and
+ * when the backend is genuinely slow to answer. In that second case a bare
+ * logo is indistinguishable from a hung app, so after a few seconds it says
+ * what is actually happening. The wording claims nothing about progress,
+ * because there is no progress to report.
+ */
+function BootScreen() {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 3500);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5">
+      <Logo size={48} />
+      <p
+        className="fx-label transition-opacity duration-500"
+        style={{ opacity: slow ? 1 : 0 }}
+        aria-live="polite"
+      >
+        {slow ? 'Waking the server' : ''}
+      </p>
+    </div>
+  );
+}
 
 export function AppRoot() {
   const { user, ready } = useAuth();
@@ -38,9 +71,7 @@ export function AppRoot() {
       />
 
       {!ready ? (
-        <div className="min-h-screen flex items-center justify-center">
-          <Logo size={48} />
-        </div>
+        <BootScreen />
       ) : user ? (
         <AppLayout />
       ) : (
