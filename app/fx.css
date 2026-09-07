@@ -263,6 +263,22 @@
 [data-fx-env="dark-matter"] .fx-env__lens { opacity: 1; }
 [data-fx-env="dark-matter"] .fx-env__horizon { opacity: 0.2; }
 
+/* ── Semantic status ──────────────────────────────────────────────────────
+   Accept / Reject and per-step outcomes carry a meaning the accent cannot.
+   They were hardcoded tailwind emerald/red, which ignored the palette and sat
+   badly on the light templates. These derive nothing from the accent on
+   purpose — "succeeded" must not change colour when the theme does. */
+:root {
+  --fx-ok: #34d399;
+  --fx-ok-strong: #10b981;
+  --fx-danger: #f87171;
+}
+.light {
+  --fx-ok: #059669;
+  --fx-ok-strong: #047857;
+  --fx-danger: #dc2626;
+}
+
 /* ── High contrast ─────────────────────────────────────────────────────────
    Declared after the environment presets on purpose: an accessibility choice
    outranks a decorative one, and [data-fx-env] shares its specificity, so the

@@ -19,6 +19,8 @@ import {
   type CodeFileEntry,
   type SearchHit,
 } from '@/lib/fsAccess';
+import { AICore } from '@/components/fx/AICore';
+import type { CoreState } from '@/lib/fx/aiCoreScene';
 import { CodeMirrorEditor } from '@/components/code/CodeMirrorEditor';
 import { DiffViewer } from '@/components/code/DiffViewer';
 import { langLabel } from '@/components/code/cmLang';
@@ -63,7 +65,7 @@ function StepIcon({ status }: { status: StepStatus }) {
     return <span className="w-3 h-3 rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent)] animate-spin flex-shrink-0" />;
   if (status === 'done')
     return (
-      <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+      <svg className="w-3.5 h-3.5 text-[var(--fx-ok)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
     );
   if (status === 'failed' || status === 'skipped')
     return (
@@ -598,10 +600,17 @@ export function CodeView({
     ? allPaths.filter((p) => p.toLowerCase().includes(quickQuery.trim().toLowerCase())).slice(0, 40)
     : allPaths.slice(0, 40);
 
+  // The core shows only real agent state. `busy` is the in-flight flag and
+  // 'running' is a step status the backend reports; when a request is in flight
+  // but no step has started, the honest claim is "thinking", not a narrower
+  // stage. Nothing here is invented and no reasoning is exposed.
+  const anyStepRunning = messages.some((m) => m.steps?.some((st) => st.status === 'running'));
+  const coreState: CoreState = !busy ? 'idle' : anyStepRunning ? 'generating' : 'thinking';
+
   return (
     <main className="relative flex-1 flex flex-col h-full min-w-0 overflow-hidden">
       {/* Header */}
-      <header className="flex items-center gap-2 px-3 sm:px-4 h-14 flex-shrink-0 border-b border-[var(--line)] bg-[var(--panel)]">
+      <header className="fx-header relative flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-16 flex-shrink-0">
         <button
           onClick={onToggleSidebar}
           className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-[var(--ink-3)] hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors"
@@ -612,11 +621,15 @@ export function CodeView({
         <svg className="w-4.5 h-4.5 text-[var(--accent-fg)] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
-        <h1 className="text-sm font-semibold text-[var(--ink)] truncate">
-          Code mode {folderName && <span className="text-[var(--ink-3)] font-normal">· {folderName}</span>}
-        </h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-sm font-semibold leading-none text-[var(--ink)]">Code mode</h1>
+          <p className="fx-label mt-1 truncate leading-none !tracking-[0.16em]">
+            {folderName || 'No folder open'}
+            {proposalPaths.length > 0 && ` · ${proposalPaths.length} proposed`}
+          </p>
+        </div>
         {dir && (
-          <span className="hidden sm:inline text-[10px] text-[var(--ink-4)] ml-auto">
+          <span className="hidden sm:inline text-[10px] text-[var(--ink-4)]">
             ⌘/Ctrl+P open · ⌘/Ctrl+S save
           </span>
         )}
@@ -631,17 +644,17 @@ export function CodeView({
           {dir ? (
           <>
           {/* LEFT — file tree / search */}
-          <div className="w-56 flex-shrink-0 border-r border-[var(--line)] flex flex-col min-h-0">
+          <div className="fx-rail-nav w-56 flex-shrink-0 border-r border-[var(--line)] flex flex-col min-h-0">
             <div className="flex items-center border-b border-[var(--line)] text-xs">
               <button
                 onClick={() => setLeftTab('files')}
-                className={`flex-1 py-2 font-medium transition-colors ${leftTab === 'files' ? 'text-[var(--ink)] border-b-2 border-[var(--accent)]' : 'text-[var(--ink-4)] hover:text-[var(--ink-2)]'}`}
+                className={`fx-press flex-1 py-2 font-medium transition-colors ${leftTab === 'files' ? 'text-[var(--ink)] border-b-2 border-[var(--accent)]' : 'text-[var(--ink-4)] hover:text-[var(--ink-2)]'}`}
               >
                 Files
               </button>
               <button
                 onClick={() => setLeftTab('search')}
-                className={`flex-1 py-2 font-medium transition-colors ${leftTab === 'search' ? 'text-[var(--ink)] border-b-2 border-[var(--accent)]' : 'text-[var(--ink-4)] hover:text-[var(--ink-2)]'}`}
+                className={`fx-press flex-1 py-2 font-medium transition-colors ${leftTab === 'search' ? 'text-[var(--ink)] border-b-2 border-[var(--accent)]' : 'text-[var(--ink-4)] hover:text-[var(--ink-2)]'}`}
               >
                 Search
               </button>
@@ -666,14 +679,14 @@ export function CodeView({
                         <button onClick={() => openFile(path)} title={path} className={`flex items-center gap-1.5 flex-1 min-w-0 text-left truncate ${activeTab === path ? 'text-[var(--ink)]' : 'text-[var(--ink-3)] group-hover/row:text-[var(--ink-2)]'}`}>
                           {proposals[path] && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" title="Proposed changes" />}
                           <span className="truncate">{path}</span>
-                          {isNew && <span className="text-[9px] text-emerald-400 flex-shrink-0">new</span>}
+                          {isNew && <span className="text-[9px] font-medium text-[var(--fx-ok)] flex-shrink-0">new</span>}
                         </button>
                         {!isNew && (
                           <span className="hidden group-hover/row:flex items-center gap-0.5 flex-shrink-0">
                             <button onClick={() => doRename(path)} title="Rename" className="w-5 h-5 flex items-center justify-center rounded text-[var(--ink-4)] hover:text-[var(--ink)]">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </button>
-                            <button onClick={() => removeFile(path)} title="Delete" className="w-5 h-5 flex items-center justify-center rounded text-[var(--ink-4)] hover:text-red-400">
+                            <button onClick={() => removeFile(path)} title="Delete" className="w-5 h-5 flex items-center justify-center rounded text-[var(--ink-4)] hover:text-[var(--fx-danger)]">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                           </span>
@@ -719,8 +732,14 @@ export function CodeView({
           {/* MIDDLE — tabs + editor / diff */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-[var(--line)]">
             {openTabs.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-sm text-[var(--ink-4)] px-6 text-center">
-                Open a file from the left, or ask the agent on the right →
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+                <AICore state={coreState} size={168} />
+                <div>
+                  <p className="fx-label mb-2">Code Intelligence</p>
+                  <p className="max-w-xs text-[13px] leading-relaxed text-[var(--ink-3)]">
+                    Open a file from the tree, or ask the agent on the right to plan a change.
+                  </p>
+                </div>
               </div>
             ) : (
               <>
@@ -755,11 +774,11 @@ export function CodeView({
                           <button onClick={() => setShowDiff((s) => ({ ...s, [activeTab]: true }))} className={`px-2 py-1 ${showDiff[activeTab] ? 'bg-[var(--fill-strong)] text-[var(--ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}>Diff</button>
                           <button onClick={() => setShowDiff((s) => ({ ...s, [activeTab]: false }))} className={`px-2 py-1 ${!showDiff[activeTab] ? 'bg-[var(--fill-strong)] text-[var(--ink)]' : 'text-[var(--ink-3)] hover:text-[var(--ink)]'}`}>Edit</button>
                         </div>
-                        <button onClick={() => rejectProposal(activeTab)} className="text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2.5 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">Reject</button>
-                        <button onClick={() => acceptProposal(activeTab)} className="text-[11px] font-medium rounded-lg bg-emerald-600 text-white px-2.5 py-1 hover:bg-emerald-500 transition-colors">Accept</button>
+                        <button onClick={() => rejectProposal(activeTab)} className="fx-press text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2.5 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">Reject</button>
+                        <button onClick={() => acceptProposal(activeTab)} className="fx-press text-[11px] font-medium rounded-lg bg-[var(--fx-ok)] text-white px-2.5 py-1 hover:bg-[var(--fx-ok-strong)] transition-colors">Accept</button>
                       </div>
                     ) : (
-                      <button onClick={save} disabled={!dirty[activeTab]} className="text-[11px] font-medium rounded-lg bg-[var(--accent)] text-white px-3 py-1 hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Save</button>
+                      <button onClick={save} disabled={!dirty[activeTab]} className="fx-press text-[11px] font-medium rounded-lg bg-[var(--accent)] text-white px-3 py-1 hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Save</button>
                     )}
                   </div>
                 )}
@@ -777,46 +796,48 @@ export function CodeView({
           </div>
           </>
           ) : (
-            <div className="code3d-scene flex-1 flex flex-col items-center justify-center text-center px-8 border-r border-[var(--line)] overflow-hidden">
-              <div className="code3d-rise flex flex-col items-center">
-                {/* Subtle floating 3D "code panel" motif (existing accent/surfaces) */}
-                <div className="relative mb-9" aria-hidden>
-                  <div className="code3d-glow" />
-                  <div className="code3d-stack">
-                    <div className="code3d-panel p1" />
-                    <div className="code3d-panel p2" />
-                    <div className="code3d-panel flex flex-col justify-center gap-2 px-4">
-                      <div className="code3d-line accent" style={{ width: '46%' }} />
-                      <div className="code3d-line" style={{ width: '82%' }} />
-                      <div className="code3d-line" style={{ width: '64%' }} />
-                      <div className="code3d-line" style={{ width: '73%' }} />
-                    </div>
-                  </div>
+            <div className="relative flex-1 flex items-center justify-center overflow-hidden border-r border-[var(--line)] px-8">
+              <div className="fx-seq mx-auto grid w-full max-w-3xl items-center gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:gap-12">
+                <div className="order-2 text-left md:order-1">
+                  <p className="fx-label mb-4">Code Intelligence</p>
+                  <h2 className="fx-display text-[1.9rem] leading-[1.06] sm:text-[2.3rem]">
+                    Point it at a folder.
+                  </h2>
+                  <p className="mt-4 max-w-md text-[13.5px] leading-relaxed text-[var(--ink-3)]">
+                    Each code chat keeps its own folder and memory. The agent plans, edits, and you
+                    accept the diffs. Terminal commands aren&apos;t available in a browser.
+                  </p>
+                  <button
+                    onClick={openFolder}
+                    disabled={loadingFolder}
+                    className="fx-press mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_-12px_var(--fx-halo-strong)] transition-colors hover:bg-[var(--accent-strong)] disabled:opacity-50"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
+                    {loadingFolder ? 'Reading…' : 'Open folder'}
+                  </button>
+                  <p className="mt-4 text-[11px] text-[var(--ink-4)]">
+                    Chrome or Edge · ⌘/Ctrl+P open a file · ⌘/Ctrl+S save
+                  </p>
                 </div>
-                <p className="text-sm text-[var(--ink-2)] mb-1">Open a project folder for this chat.</p>
-                <p className="text-xs text-[var(--ink-4)] mb-5 max-w-sm">
-                  Each code chat has its own folder + memory (like Claude Code). The agent plans, edits,
-                  and you accept the diffs. Terminal commands aren&apos;t available in a browser.
-                </p>
-                <button onClick={openFolder} disabled={loadingFolder} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white px-5 py-2.5 hover:bg-[var(--accent-strong)] disabled:opacity-50 transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
-                  {loadingFolder ? 'Reading…' : 'Open folder'}
-                </button>
+
+                <div className="order-1 flex justify-center md:order-2 md:justify-end" aria-hidden>
+                  <AICore state={coreState} size={240} />
+                </div>
               </div>
             </div>
           )}
 
           {/* RIGHT — AI agent chat (always visible so each chat's conversation shows) */}
-          <div className="w-80 flex-shrink-0 flex flex-col min-h-0">
+          <div className="fx-rail w-80 flex-shrink-0 flex flex-col min-h-0">
             <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--line)]">
-              <span className="text-xs font-medium text-[var(--ink-2)]">Agent</span>
+              <span className="fx-label !tracking-[0.2em] !text-[var(--ink-2)]">Code Intelligence</span>
               <div className="flex items-center gap-1.5">
                 {proposalPaths.length > 0 && (
-                  <button onClick={acceptAll} className="text-[11px] font-medium rounded-lg bg-emerald-600 text-white px-2.5 py-1 hover:bg-emerald-500 transition-colors">
+                  <button onClick={acceptAll} className="fx-press text-[11px] font-medium rounded-lg bg-[var(--fx-ok)] text-white px-2.5 py-1 hover:bg-[var(--fx-ok-strong)] transition-colors">
                     Accept all ({proposalPaths.length})
                   </button>
                 )}
-                <button onClick={newChat} title="New code chat (its own folder + memory)" className="text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">
+                <button onClick={newChat} title="New code chat (its own folder + memory)" className="fx-press text-[11px] font-medium rounded-lg border border-[var(--line)] text-[var(--ink-3)] px-2 py-1 hover:text-[var(--ink)] hover:bg-[var(--fill)] transition-colors">
                   New chat
                 </button>
               </div>
@@ -824,7 +845,10 @@ export function CodeView({
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.map((m) => (
                 <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                  <div className={`text-[13px] leading-relaxed rounded-xl px-3 py-2 ${m.role === 'user' ? 'bg-[var(--fill-strong)] text-[var(--ink)] max-w-[85%]' : 'text-[var(--ink-2)] w-full'}`}>
+                  <div
+                    className={`text-[13px] leading-relaxed rounded-xl px-3 py-2 ${m.role === 'user' ? 'fx-msg-user bg-[var(--fill-strong)] text-[var(--ink)] max-w-[85%]' : 'fx-msg-ai w-full text-[var(--ink-2)]'}`}
+                    data-streaming={m.role === 'assistant' && busy && m.id === messages[messages.length - 1]?.id ? 'true' : 'false'}
+                  >
                     {m.role === 'assistant' ? <Markdown>{m.text}</Markdown> : m.text}
 
                     {/* Live plan steps */}
@@ -848,7 +872,7 @@ export function CodeView({
                     {m.files && m.files.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {m.files.map((p) => (
-                          <button key={p} onClick={() => openFile(p)} className="inline-flex items-center gap-1 text-[11px] font-mono rounded-md px-2 py-0.5 border border-[var(--line)] bg-[var(--fill)] hover:bg-[var(--fill-hover)] text-[var(--ink-2)]">
+                          <button key={p} onClick={() => openFile(p)} data-active={proposals[p] ? 'true' : 'false'} className="fx-capsule fx-press inline-flex items-center gap-1 text-[11px] font-mono rounded-md px-2 py-0.5 border border-[var(--line)] bg-[var(--fill)] hover:bg-[var(--fill-hover)] text-[var(--ink-2)]">
                             {proposals[p] && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />}
                             {p.split('/').pop()}
                           </button>
@@ -859,15 +883,15 @@ export function CodeView({
                 </div>
               ))}
               {busy && (
-                <div className="flex items-center gap-2 text-xs text-[var(--ink-3)]">
+                <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent)] animate-spin" />
-                  Working…
+                  <span className="fx-label">Working</span>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
             <div className="border-t border-[var(--line)] p-2.5">
-              <div className="flex items-end gap-2">
+              <div className="fx-console flex items-end gap-2 px-2 py-1.5" data-busy={busy ? 'true' : 'false'}>
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -880,9 +904,9 @@ export function CodeView({
                   disabled={busy || !dir}
                   rows={1}
                   placeholder={dir ? 'Ask to build, change, or explain…' : 'Open a folder to start…'}
-                  className="flex-1 resize-none bg-[var(--fill)] border border-[var(--line)] rounded-xl px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none focus:border-[var(--accent)] disabled:opacity-60 max-h-28"
+                  className="flex-1 resize-none bg-transparent border-0 px-2 py-1.5 text-sm text-[var(--ink)] placeholder:text-[var(--ink-4)] outline-none disabled:opacity-60 max-h-28"
                 />
-                <button onClick={send} disabled={busy || !input.trim() || !dir} className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <button onClick={send} disabled={busy || !input.trim() || !dir} className="fx-press flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.3} d="M12 19V5M5 12l7-7 7 7" /></svg>
                 </button>
               </div>
@@ -894,7 +918,7 @@ export function CodeView({
       {/* Quick-open palette (Ctrl/Cmd+P) */}
       {quickOpen && dir && (
         <div className="fixed inset-0 z-[90] flex items-start justify-center pt-24 bg-black/40" onClick={() => setQuickOpen(false)}>
-          <div className="w-full max-w-lg mx-4 rounded-xl border border-[var(--line-strong)] bg-[var(--elevated)] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="fx-glass fx-glass--lg w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <input
               autoFocus
               value={quickQuery}
