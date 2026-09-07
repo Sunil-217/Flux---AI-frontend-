@@ -676,6 +676,24 @@
 
 /* ── Command modules (empty-state quick actions) ───────────────────────── */
 
+/* The command-module grid.
+
+   Deliberately auto-fit rather than a fixed column count at viewport
+   breakpoints: this grid lives in the centre column of the workspace, whose
+   width depends on whether the navigation rail and the context rail are open,
+   not on the viewport. A `lg:grid-cols-4` measured 90px per module at 1440
+   with both rails out. auto-fit resolves against the real column width, so it
+   lands on 2, 3 or 4 columns on its own and a module is never narrower than it
+   can render. Phones keep a plain two-up, which fits 375 exactly. */
+.fx-modules {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  .fx-modules { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+}
+
 .fx-module {
   position: relative;
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
