@@ -76,8 +76,8 @@ const SHELL_FRAG = /* glsl */ `
   uniform vec3 uColor; uniform float uEnergy; uniform float uDark;
   varying vec3 vNormal; varying vec3 vView;
   void main() {
-    float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
-    float a = fres * fres * mix(0.70, 0.85, uDark);
+    float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.0);
+    float a = fres * fres * mix(0.70, 0.95, uDark);
     vec3 col = uColor * (mix(0.35, 0.55, uDark) + fres * mix(0.6, 1.15, uDark)) * uEnergy;
     gl_FragColor = vec4(mix(col, col * a, uDark), a);
   }
@@ -111,7 +111,7 @@ const POINT_FRAG = /* glsl */ `
     // Dark: a soft additive mote, the haze IS the effect. Light: a small crisp
     // dot with normal blending — soft motes overlap into a solid disc on paper.
     float edge = mix(0.16, 0.22, uDark);
-    float a = smoothstep(edge, edge * 0.2, r) * vFade * mix(0.95, 0.8, uDark);
+    float a = smoothstep(edge, edge * 0.5, r) * vFade * mix(0.95, 0.92, uDark);
     gl_FragColor = vec4(mix(uColor, uColor * a, uDark), a);
   }
 `;
@@ -206,7 +206,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     base.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.max(0.22, hsl.l * 0.62));
   }
 
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'low-power' });
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
@@ -226,8 +226,8 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
 
   const shellMat = track(new THREE.ShaderMaterial({ uniforms: shellU, vertexShader: SHELL_VERT, fragmentShader: SHELL_FRAG, transparent: true, blending, depthWrite: false, side: THREE.DoubleSide }));
   const pointMat = track(new THREE.ShaderMaterial({ uniforms: pointU, vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, transparent: true, blending, depthWrite: false }));
-  const lineMat = track(new THREE.LineBasicMaterial({ color: base.clone(), transparent: true, opacity: dark ? 0.22 : 0.24, depthWrite: false, blending }));
-  const wireMat = track(new THREE.MeshBasicMaterial({ color: base.clone(), wireframe: true, transparent: true, opacity: dark ? 0.16 : 0.17, depthWrite: false }));
+  const lineMat = track(new THREE.LineBasicMaterial({ color: base.clone(), transparent: true, opacity: dark ? 0.38 : 0.3, depthWrite: false, blending }));
+  const wireMat = track(new THREE.MeshBasicMaterial({ color: base.clone(), wireframe: true, transparent: true, opacity: dark ? 0.3 : 0.22, depthWrite: false }));
 
   const colourTargets: THREE.Color[] = [shellU.uColor.value, pointU.uColor.value, lineMat.color, wireMat.color];
 
@@ -243,7 +243,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     for (let i = 0; i < n; i++) seeds[i] = Math.random();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
-    pointU.uSize.value = size * (dark ? 1 : 0.72);
+    pointU.uSize.value = size * (dark ? 1 : 0.62);
     pointU.uSpread.value = spread;
     const pts = new THREE.Points(geo, pointMat);
     group.add(pts);
@@ -256,9 +256,18 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     const out: number[] = [];
     for (let i = 0; i < n && out.length < maxLinks * 6; i += stride) {
       const ax = positions[i * 3], ay = positions[i * 3 + 1], az = positions[i * 3 + 2];
+      // The NEAREST neighbour within reach, not the first one found. Taking the
+      // first produced occasional very long chords that shot out past the body
+      // of the object and read as glitch streaks rather than structure.
+      let best = -1;
+      let bestD = reach;
       for (let j = i + 1; j < Math.min(i + 40, n); j++) {
         const bx = positions[j * 3], by = positions[j * 3 + 1], bz = positions[j * 3 + 2];
-        if ((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2 < reach) { out.push(ax, ay, az, bx, by, bz); break; }
+        const d = (ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2;
+        if (d < bestD) { bestD = d; best = j; }
+      }
+      if (best >= 0) {
+        out.push(ax, ay, az, positions[best * 3], positions[best * 3 + 1], positions[best * 3 + 2]);
       }
     }
     const geo = track(new THREE.BufferGeometry());
@@ -293,7 +302,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     case 'lattice': {
       const pts = lattice(particleCount, 3.2);
       addPoints(pts, 2.0);
-      addLinks(pts, 140, 0.9, 3);
+      addLinks(pts, 140, 0.34, 3);
       addWire(new THREE.BoxGeometry(3.2, 3.2, 3.2));
       break;
     }
@@ -308,7 +317,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     case 'cortex': {
       const pts = hemispheres(particleCount, 1.9);
       addPoints(pts, 2.2);
-      addLinks(pts, 110, 0.35, 5);
+      addLinks(pts, 110, 0.3, 5);
       break;
     }
     case 'singularity': {
@@ -343,7 +352,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       addWire(new THREE.IcosahedronGeometry(1.19, 1));
       const pts = fibonacciSphere(particleCount, 1.95);
       addPoints(pts, 1.7);
-      addLinks(pts, 90, 0.75, 7);
+      addLinks(pts, 90, 0.3, 7);
       break;
     }
   }
@@ -370,11 +379,14 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     setPointer(x, y) { px = x; py = y; },
     resize(w, h) {
       if (disposed || w <= 0 || h <= 0) return;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(w, h, false);
       // Points scale with the object, not the screen: a 180px core keeps the
       // same visual density as a 560px one.
-      pointU.uPixel.value = Math.max(7, renderer.domElement.height * 0.038);
+      // The linear term keeps density consistent across core sizes; the floor
+      // keeps a point above the legibility threshold on a small phone core,
+      // where a strictly proportional dot lands under 2 CSS px.
+      pointU.uPixel.value = Math.max(14, renderer.domElement.height * 0.055);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     },
@@ -400,7 +412,7 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
       if (pointsObj) pointsObj.rotation.y = -elapsed * spin * 0.55;
       if (linksObj && pointsObj) linksObj.rotation.y = pointsObj.rotation.y;
       for (const o of orbiters) o.obj.rotation[o.axis] += 0.015 * o.rate * motionScale;
-      lineMat.opacity = (dark ? 0.13 : 0.14) + current.energy * (dark ? 0.12 : 0.1);
+      lineMat.opacity = (dark ? 0.26 : 0.18) + current.energy * (dark ? 0.16 : 0.12);
 
       camera.position.x += ((px - 0.5) * 0.5 - camera.position.x) * 0.05;
       camera.position.y += (-(py - 0.5) * 0.35 - camera.position.y) * 0.05;

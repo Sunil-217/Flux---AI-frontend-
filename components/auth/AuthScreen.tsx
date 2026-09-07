@@ -520,12 +520,12 @@ export function AuthScreen() {
       </div>
 
       {/* ── Sign-in column: centred on phones, floated right on the stage ── */}
-      <main className="relative flex flex-1 flex-col items-center justify-center px-5 pt-24 pb-10 sm:px-8 lg:flex-row lg:justify-end lg:px-0 lg:pr-[8%] lg:pt-0 lg:pb-0">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-5 pt-20 pb-8 sm:px-8 lg:flex-row lg:justify-end lg:px-0 lg:pr-[8%] lg:pt-0 lg:pb-0">
         {/* Phone / tablet composition: the core sits in the gap between the
             wordmark and the card, fully visible, instead of hiding behind it.
             One low-density instance; the desktop stage is not rendered here. */}
-        <div className="mb-6 lg:hidden" aria-hidden>
-          <AICore state="idle" size={132} />
+        <div className="mb-4 lg:hidden" aria-hidden>
+          <AICore state="idle" size={200} />
         </div>
         {/* Card: entrance + cursor-follow 3D tilt + specular highlight. */}
         <div
