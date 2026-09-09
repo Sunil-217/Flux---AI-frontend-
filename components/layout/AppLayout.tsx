@@ -139,6 +139,12 @@ export function AppLayout() {
     setCodeSessionFolder,
   } = useCodeSessions();
 
+  // Deep research is a single blocking request rather than a stream, so the
+  // chat hook never learns it is in flight. Tracked here so the context rail
+  // shows the request as running. No stage is invented: the backend reports
+  // none for this path, so the network shows "Working" and nothing more.
+  const [researching, setResearching] = useState(false);
+
   const { isLoading, status, sendMessage, resendQuestion, regenerateVariant, stop } = useChat(
     activeSessionId,
     {
@@ -343,6 +349,7 @@ export function AppLayout() {
         content: '**Deep research in progress** — searching and reading multiple sources (30–90s).',
         timestamp: Date.now(),
       });
+      setResearching(true);
       try {
         const { report, sources } = await deepResearch(q);
         patchMessage(sid, aId, {
@@ -362,6 +369,8 @@ export function AppLayout() {
         patchMessage(sid, aId, {
           content: `⚠️ **Deep research failed** — ${apiError(e, 'please try again in a moment.')}`,
         });
+      } finally {
+        setResearching(false);
       }
     },
     [activeSessionId, addMessage, patchMessage, enabled]
@@ -1040,7 +1049,7 @@ export function AppLayout() {
         <ContextRail
           session={activeSession}
           status={status}
-          running={isLoading}
+          running={isLoading || researching}
           onAddUrl={handleAddUrl}
           onResearch={() => insertPrompt('/research ')}
           onQuiz={() => handleSendMessage('/quiz')}
