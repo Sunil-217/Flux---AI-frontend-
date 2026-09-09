@@ -566,21 +566,21 @@
 
 .fx-net { padding: 2px 0 0; }
 .fx-net__svg { width: 100%; height: auto; overflow: visible; }
-.fx-net__link { stroke: color-mix(in srgb, var(--ink) 12%, transparent); stroke-width: 1; transition: stroke var(--fx-t) ease, stroke-width var(--fx-t) ease; }
+.fx-net__link { stroke: color-mix(in srgb, var(--ink) 18%, transparent); stroke-width: 1; transition: stroke var(--fx-t) ease, stroke-width var(--fx-t) ease; }
 .fx-net__link[data-state="done"] { stroke: color-mix(in srgb, var(--accent) 34%, transparent); }
 .fx-net__link[data-state="flow"] { stroke: var(--fx-halo-strong); stroke-width: 1.6; stroke-dasharray: 5 7; animation: fx-net-flow calc(0.85s * var(--fx-speed)) linear infinite; }
 @keyframes fx-net-flow { to { stroke-dashoffset: -12; } }
 .fx-net__halo { fill: var(--fx-halo); opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity var(--fx-t) ease; }
 .fx-net__node[data-state="active"] .fx-net__halo { opacity: 1; animation: fx-net-halo calc(1.7s * var(--fx-speed)) ease-in-out infinite; }
 @keyframes fx-net-halo { 0%, 100% { opacity: 0.35; transform: scale(0.82); } 50% { opacity: 0.9; transform: scale(1.12); } }
-.fx-net__dot { fill: var(--base); stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1.2; transition: fill var(--fx-t) ease, stroke var(--fx-t) ease; }
+.fx-net__dot { fill: var(--base); stroke: color-mix(in srgb, var(--ink) 30%, transparent); stroke-width: 1.4; transition: fill var(--fx-t) ease, stroke var(--fx-t) ease; }
 .fx-net__node[data-state="done"] .fx-net__dot { fill: color-mix(in srgb, var(--accent) 55%, transparent); stroke: color-mix(in srgb, var(--accent) 80%, transparent); }
 .fx-net__node[data-state="active"] .fx-net__dot { fill: var(--accent); stroke: color-mix(in srgb, var(--accent) 100%, white 25%); stroke-width: 1.6; }
 .fx-net__node[data-state="error"] .fx-net__dot { fill: color-mix(in srgb, #f87171 70%, var(--base)); stroke: #f87171; }
-.fx-net__label { fill: var(--ink-4); font-family: var(--fx-mono); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; text-anchor: middle; transition: fill var(--fx-t) ease; }
+.fx-net__label { fill: var(--ink-3); font-family: var(--fx-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; text-anchor: middle; transition: fill var(--fx-t) ease; }
 .fx-net__node[data-state="done"] .fx-net__label { fill: var(--ink-3); }
 .fx-net__node[data-state="active"] .fx-net__label { fill: var(--ink); }
-.fx-net[data-idle="true"] .fx-net__svg { opacity: 0.45; }
+.fx-net[data-idle="true"] .fx-net__svg { opacity: 0.62; }
 .fx-net__status { margin-top: 2px; font-family: var(--fx-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-4); text-align: center; }
 .fx-net[data-idle="false"] .fx-net__status { color: var(--accent-fg); }
 

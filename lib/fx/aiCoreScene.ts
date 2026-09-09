@@ -203,7 +203,11 @@ export function createAICore(canvas: HTMLCanvasElement, opts: CoreOptions): Core
     // toward ink so the geometry has body without a glow doing the work.
     const hsl = { h: 0, s: 0, l: 0 };
     base.getHSL(hsl);
-    base.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.max(0.22, hsl.l * 0.62));
+    // A desaturated accent (the zinc / graphite templates) has no hue to carry
+    // the object, so it has to go darker still to read as ink on paper rather
+    // than a pale smudge. Measured on the 'paper' template in production.
+    const lowSat = hsl.s < 0.18;
+    base.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), Math.max(0.2, hsl.l * (lowSat ? 0.48 : 0.62)));
   }
 
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
